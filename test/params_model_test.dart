@@ -52,6 +52,8 @@ class FakeEngineBridge implements EngineBridge {
   @override
   Future<void> setStabEnabled(bool enabled) async {}
   @override
+  Future<void> setGyroOffset(double offsetMs) async {}
+  @override
   Future<void> setImuLpf(double hz) async {
     imuLpfCalls.add(hz);
   }

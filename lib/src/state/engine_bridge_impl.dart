@@ -17,6 +17,9 @@ class EngineBridgeImpl implements EngineBridge {
   Future<void> setStabEnabled(bool enabled) => _api.setStabEnabled(enabled);
 
   @override
+  Future<void> setGyroOffset(double offsetMs) => _api.setGyroOffset(offsetMs);
+
+  @override
   Future<void> setImuLpf(double hz) => _api.setImuLpf(hz);
   @override
   Future<void> setSmoothingMethod(int index) => _api.setSmoothingMethod(index);

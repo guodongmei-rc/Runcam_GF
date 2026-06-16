@@ -49,6 +49,14 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   id<MTLTexture> _mdkInput;               // MDK 解码目标(视频原生尺寸,带 RenderTarget usage)
   std::unique_ptr<mdk::Player> _player;   // MDK 播放器(.mm 里用 C++)
   mdk::MetalRenderAPI _mdkRenderAPI;      // MDK Metal RenderAPI 描述
+  int64_t _lastProcessedTsUs;             // 上一帧已 process 的 ts:同一解码帧只算一次(60Hz 驱动 30fps 源)
+
+  // 诊断(仅日志,不改功能):帧节奏探针。
+  int _fovProbeN;
+  int64_t _lastProbeTsUs;   // 上一帧 process 的 ts,用来数重复帧 + 步进
+  int _dupSincePrint;       // 本窗口内 ts 与上一帧相同(重复处理同一解码帧)的次数
+  int64_t _minDtsUs;        // 本窗口内帧间 ts 步进的最小/最大(看节奏是否均匀)
+  int64_t _maxDtsUs;
 }
 
 - (instancetype)initWithStabilizer:(void *_Nullable)stabilizer {
@@ -230,6 +238,12 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   if (ts < 0.0) { return; }
   int64_t tsUs = (int64_t)llround(ts * 1.0e6);
 
+  // 30fps 源 / 60Hz 驱动:renderVideo 必须每 tick 调(驱动 MDK 解码),但 ts 没变 = 还是上一帧,
+  // 重复 process 纯浪费一倍 GPU(produce~2x),偶发把单 tick 顶过 16.6ms → 掉显示帧 = 卡顿。
+  // 同一解码帧只 process 一次;Flutter 由 Dart ticker 维持 60Hz 合成,_latest 不变即按住前帧。
+  if (tsUs == _lastProcessedTsUs) { return; }
+  _lastProcessedTsUs = tsUs;
+
   // 取下一张输出缓冲,并在锁内**立即推进** _next(取帧时推进,而非完成回调里):
   // 否则 GPU 慢于帧间隔时连续两帧会选到同一张 → 三缓冲退化成单缓冲 + 撕裂。
   [_lock lock];
@@ -264,6 +278,23 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
       NSLog(@"[preview] process_frame_metal_bgra8 failed: %s", gyroflow_last_error());
       CFRelease(cvtex);
       return;
+    }
+    // 节奏诊断(仅日志,printf 走 stdout):每秒统计帧间 ts 步进与重复帧。
+    //   30fps 视频理想:每个唯一帧 process 一次,dts≈33333us、dup≈0;
+    //   dup 高(~半数)→ 在重复处理同一解码帧(60Hz 轮询 30fps);
+    //   dts min/max 差大 → 步进不均(judder,看着一卡一卡)。
+    if (_fovProbeN > 0) {
+      int64_t dts = tsUs - _lastProbeTsUs;
+      if (dts == 0) { _dupSincePrint++; }
+      if (_minDtsUs == 0 || dts < _minDtsUs) { _minDtsUs = dts; }
+      if (dts > _maxDtsUs) { _maxDtsUs = dts; }
+    }
+    _lastProbeTsUs = tsUs;
+    if ((_fovProbeN++ % 60) == 0) {
+      printf("[preview][pace] dup/60=%d  dts(min..max)=%lld..%lldus  fov=%.3f\n",
+             _dupSincePrint, (long long)_minDtsUs, (long long)_maxDtsUs, info.fov);
+      _dupSincePrint = 0; _minDtsUs = 0; _maxDtsUs = 0;
+      fflush(stdout);
     }
   }
 

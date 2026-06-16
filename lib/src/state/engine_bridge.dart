@@ -13,6 +13,12 @@ abstract class EngineBridge {
   /// 显式打开(对齐 ViewController.mm 的 gyroflow_set_stab_enabled(s, 1))。
   Future<void> setStabEnabled(bool enabled);
 
+  /// 陀螺时间偏移(ms)。raw-IMU 机型(GoPro Hero5/6/7 等,has_accurate_timestamps=false)
+  /// 陀螺数据流与视频帧有固有错位(Hero6 实测约 +48ms);不补偿会用错时刻姿态做校正、
+  /// 反向叠加抖动("开防抖比不开还抖")。production 应走 autosync(阶段4)精确求;
+  /// 预览 spike 期间按机型默认值补。offset_ms>0 = 陀螺超前视频,0 = 清除。
+  Future<void> setGyroOffset(double offsetMs);
+
   Future<void> setImuLpf(double hz);
   Future<void> setSmoothingMethod(int index);
   Future<void> setSmoothingParam(String name, double value);

@@ -68,6 +68,12 @@ class _PreviewPageState extends State<PreviewPage>
       await _bridge.createStabilizer();
       final videoInfo = await _bridge.openVideo(uri);
       await _bridge.setStabEnabled(true);
+      // 【修复·raw-IMU 不防抖】老 open() 页对 GoPro Hero6 跑 autosync 得到 ~49ms 陀螺偏移
+      //   并应用;预览没跑 autosync(阶段4),gyro_offset 停在 0 → 校正用错 49ms 的姿态 →
+      //   "看着没防抖"。spike 期间按机型默认补偿(FFI 头文件:Hero5/6/7≈+48ms;本片 autosync=49.4ms)。
+      //   ⚠️ 仅对 raw-IMU 机型成立:精确时间戳机型(Hero8+/原生 quat)加任何偏移反而破坏防抖,
+      //      production 必须按 has_accurate_timestamps/has_quaternions 门控,或直接走 autosync。
+      await _bridge.setGyroOffset(48.0);
       await _model.pushAllDefaultsAndRecompute();
       // 【诊断·阶段1】防抖根因探针:recompute 后引擎回填的 maxAngle/minFov。
       //   - maxAngle≈0 且 minFov≈1  → 引擎没拿到陀螺/无校正量 → 画面必然“不防抖”
