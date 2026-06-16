@@ -66,16 +66,16 @@ class InputPanel extends StatelessWidget {
     if (rs.isEmpty) return const [];
     const mapping = <String, String>{
       'Focal length': '焦距',
-      'Focus mode': '对焦方式',
+      'Focus mode': '对焦模式',
       'Iris': '光圈',
       'ISO': 'ISO',
-      'Shutter angle': '快门角度',
+      'Shutter angle': '快门角',
       'Shutter speed': '快门速度',
-      'Exposure': '曝光',
+      'Exposure': '曝光度',
       'White balance mode': '白平衡模式',
       'White balance': '白平衡',
-      'Color primaries': '色彩原色',
-      'Gamma equation': 'Gamma 曲线',
+      'Color primaries': '基色',
+      'Gamma equation': '伽玛方程',
     };
     final rows = <Widget>[];
     final shown = <String>{};
