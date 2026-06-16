@@ -60,6 +60,12 @@ class FakeEngineBridge implements EngineBridge {
   @override
   Future<void> setIntegrationMethod(int index) async {}
   @override
+  Future<String> lensSearch(String query) async => '[]';
+  @override
+  Future<String> loadLens(String uriOrIdOrJson) async => '{}';
+  @override
+  Future<String> getLensInfoFull() async => '{}';
+  @override
   Future<void> setImuLpf(double hz) async {
     imuLpfCalls.add(hz);
   }

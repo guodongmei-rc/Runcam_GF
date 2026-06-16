@@ -25,6 +25,12 @@ class EditController extends ChangeNotifier {
   bool busy = false;
   String status = '点「选视频」开始';
 
+  // 镜头配置(「输入」面板)。
+  String? detectedCamera; // 「检测到的相机」
+  String? detectedLens; // 「检测镜头」
+  String lensName = '未加载镜头档案';
+  Map<String, String> lensInfo = {}; // 相机/镜头/设置/尺寸/校准人
+
   // 运动数据设置(「输入」面板)。
   String imuOrientation = 'XYZ';
   int integrationMethod = 1; // 0=None 1=Comp 2=VQF 3=Madgwick
@@ -49,6 +55,7 @@ class EditController extends ChangeNotifier {
       await _bridge.setGyroOffset(48.0); // raw-IMU 机型默认补偿(阶段4 autosync 替)
       await params.pushAllDefaultsAndRecompute();
       recordingSettings = await _fetchRecordingSettings();
+      await _fetchLensInfo(); // load_video_file 已自动匹配镜头,读回填上
       uri = picked;
       videoInfo = info;
       final ow = info.outputWidth ?? 16, oh = info.outputHeight ?? 9;
@@ -108,6 +115,64 @@ class EditController extends ChangeNotifier {
           params.maxAngleYaw.abs() +
           params.maxAngleRoll.abs() >
       0.01;
+
+  /// 镜头库搜索 → [{name,id}] 列表(空查询/失败=空)。
+  Future<List<Map<String, String>>> searchLens(String q) async {
+    if (q.trim().isEmpty) return const [];
+    try {
+      final arr = jsonDecode(await _bridge.lensSearch(q));
+      if (arr is List) {
+        return arr
+            .whereType<Map>()
+            .map((m) => {'name': '${m['name'] ?? ''}', 'id': '${m['id'] ?? ''}'})
+            .where((m) => (m['id'] ?? '').isNotEmpty)
+            .toList();
+      }
+    } catch (_) {/* 搜索失败 → 空 */}
+    return const [];
+  }
+
+  /// 加载镜头档案(内置 id 或文件路径)→ recompute + 刷新镜头信息。
+  Future<void> loadLens(String idOrPath) async {
+    if (uri == null) return;
+    _setBusy(true);
+    try {
+      await _bridge.loadLens(idOrPath);
+      await _bridge.recomputeBlocking();
+      await _fetchLensInfo();
+      status = '✓ 已加载镜头档案';
+    } catch (e) {
+      status = '镜头加载失败:$e';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> _fetchLensInfo() async {
+    try {
+      final j = jsonDecode(await _bridge.getLensInfoFull());
+      if (j is! Map) return;
+      String? s(String k) {
+        final v = j[k];
+        return (v is String && v.isNotEmpty) ? v : null;
+      }
+
+      detectedCamera = s('camera');
+      detectedLens = s('lens') ?? s('lens_model');
+      lensName = s('name') ?? s('identifier') ?? '未加载镜头档案';
+      final cd = j['calib_dimension'];
+      final dim = (cd is Map && cd['w'] != null && cd['h'] != null)
+          ? '${cd['w']}×${cd['h']}'
+          : null;
+      lensInfo = {
+        '相机': ?detectedCamera,
+        '镜头': ?detectedLens,
+        '设置': ?s('camera_setting'),
+        '尺寸': ?dim,
+        '校准人': ?s('calibrated_by'),
+      };
+    } catch (_) {/* 镜头信息缺失 → 保持默认 */}
+  }
 
   /// 低通滤波器开关:开=50Hz、关=0(params 自带 push+recompute)。
   void setImuLpfOn(bool on) => params.imuLpfHz = on ? 50.0 : 0.0;

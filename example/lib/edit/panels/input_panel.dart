@@ -17,13 +17,36 @@ class InputPanel extends StatefulWidget {
 class _InputPanelState extends State<InputPanel> {
   late final TextEditingController _imu =
       TextEditingController(text: widget.controller.imuOrientation);
+  final TextEditingController _lensQuery = TextEditingController();
+  List<Map<String, String>> _lensResults = const [];
+  bool _searching = false;
 
   EditController get c => widget.controller;
 
   @override
   void dispose() {
     _imu.dispose();
+    _lensQuery.dispose();
     super.dispose();
+  }
+
+  Future<void> _runLensSearch(String q) async {
+    setState(() => _searching = true);
+    final r = await c.searchLens(q);
+    if (!mounted) return;
+    setState(() {
+      _lensResults = r;
+      _searching = false;
+    });
+  }
+
+  Future<void> _pickLens(String id) async {
+    await c.loadLens(id);
+    if (!mounted) return;
+    setState(() {
+      _lensResults = const [];
+      _lensQuery.clear();
+    });
   }
 
   @override
@@ -61,8 +84,8 @@ class _InputPanelState extends State<InputPanel> {
       GyroBigButton(label: '打开文件', onPressed: c.busy ? null : c.openAndStart),
       const SizedBox(height: 6),
       _row('文件名称', c.videoName ?? '---'),
-      _row('检测到的相机', '---'),
-      _row('检测镜头', '---'),
+      _row('检测到的相机', c.detectedCamera ?? '---'),
+      _row('检测镜头', c.detectedLens ?? '---'),
       _row('尺寸', size),
       _row('时长', dur),
       _row('帧速率', fps),
@@ -79,7 +102,44 @@ class _InputPanelState extends State<InputPanel> {
   List<Widget> _lensProfile() => [
         _title('镜头配置文件'),
         const SizedBox(height: 10),
-        _disabledSearch('搜索…'),
+        // 搜索框(回车搜索内置镜头库)。
+        TextField(
+          controller: _lensQuery,
+          enabled: c.uri != null,
+          style: const TextStyle(color: GfColors.text, fontSize: 14),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: '搜索镜头…',
+            hintStyle: const TextStyle(color: GfColors.textSecondary),
+            isDense: true,
+            filled: true,
+            fillColor: GfColors.inputBg,
+            suffixIcon: _searching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)))
+                : const Icon(Icons.search, color: GfColors.textSecondary, size: 18),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+          onSubmitted: _runLensSearch,
+        ),
+        // 搜索结果(点击加载)。
+        for (final r in _lensResults)
+          InkWell(
+            onTap: () => _pickLens(r['id']!),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Text(r['name'] ?? r['id']!,
+                  style: const TextStyle(color: GfColors.accent, fontSize: 13)),
+            ),
+          ),
+        const SizedBox(height: 10),
+        _row('当前镜头', c.lensName),
+        for (final e in c.lensInfo.entries) _row(e.key, e.value),
         const SizedBox(height: 10),
         Row(children: [
           Expanded(child: _disabledButton('打开文件')),
@@ -198,20 +258,7 @@ class _InputPanelState extends State<InputPanel> {
     );
   }
 
-  // 「后续」占位:搜索框 / 按钮 / 复选框,禁用灰显。
-  Widget _disabledSearch(String hint) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-            color: GfColors.inputBg.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8)),
-        child: Row(children: [
-          Text(hint,
-              style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
-          const Spacer(),
-          const Icon(Icons.search, color: GfColors.textSecondary, size: 18),
-        ]),
-      );
-
+  // 「后续」占位:按钮 / 复选框,禁用灰显。
   Widget _disabledButton(String label) => Container(
         height: 44,
         alignment: Alignment.center,

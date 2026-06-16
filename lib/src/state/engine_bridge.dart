@@ -59,4 +59,9 @@ abstract class EngineBridge {
   /// 运动数据设置(「输入」面板用)。改完需调用方 recompute。
   Future<void> setImuOrientation(String orientation); // 如 "XYZ" / "ZyX"
   Future<void> setIntegrationMethod(int index); // 0=None 1=Comp 2=VQF 3=Madgwick
+
+  /// 镜头配置文件(「输入」面板用)。
+  Future<String> lensSearch(String query); // 返回 JSON [{"name","id"}]
+  Future<String> loadLens(String uriOrIdOrJson); // 内置 id / 文件路径 / JSON
+  Future<String> getLensInfoFull(); // 当前镜头档案完整 JSON
 }

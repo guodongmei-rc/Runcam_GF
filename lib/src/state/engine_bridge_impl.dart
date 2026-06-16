@@ -85,4 +85,11 @@ class EngineBridgeImpl implements EngineBridge {
   @override
   Future<void> setIntegrationMethod(int index) =>
       _api.setIntegrationMethod(index);
+
+  @override
+  Future<String> lensSearch(String query) => _api.lensSearch(query);
+  @override
+  Future<String> loadLens(String uriOrIdOrJson) => _api.loadLens(uriOrIdOrJson);
+  @override
+  Future<String> getLensInfoFull() => _api.getLensInfoFull();
 }
