@@ -25,7 +25,7 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
 
 @implementation PreviewController {
   void *_stabilizer;            // 共享句柄(增量 C 起真正使用)
-  CVPixelBufferRef _pool[PREVIEW_POOL_N]; // 三缓冲:onFrame 渲到当前张,完成后轮转
+  CVPixelBufferRef _pool[PREVIEW_POOL_N]; // 三缓冲:renderOneFrame 渲到当前张,完成后轮转
   CVPixelBufferRef _latest;     // 指向 _pool 当前已渲好的一张;copyPixelBuffer 返回它
   int _next;                    // 下一张轮转下标(GPU 完成回调里推进)
   int _outW;                    // 输出(防抖后)尺寸 = CVPB / _latest 尺寸
@@ -33,11 +33,12 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   int _inW;                     // 输入(视频原生)尺寸 = _mdkInput 尺寸
   int _inH;
 
-  // 增量 B:CADisplayLink 60Hz 帧驱动。
-  CADisplayLink *_link;
+  // 帧驱动:在 _renderQueue 上背靠背连续渲(对齐原生"渲完一帧立刻渲下一帧",不被 60Hz tick 量化)。
   NSObject<FlutterTextureRegistry> *_registry;
   int64_t _textureId;
-  NSLock *_lock;                // 保护 _latest/_next 的并发读写
+  NSLock *_lock;                // 保护 _latest/_next/_renderLoopRunning 的并发读写
+  dispatch_queue_t _renderQueue; // 专用渲染串行队列(对齐原生 self.renderQueue,不占主线程)
+  BOOL _renderLoopRunning;     // 渲染循环是否在跑(_lock 保护):play 起、pause/teardown 停
   int _compositeCount;          // copyPixelBuffer 被调次数(= Flutter 合成上屏帧数)
   int _produceCount;            // GPU 产出帧数(= 真实解码+防抖出帧率)
   BOOL _tornDown;               // dispose 后置位:在飞的 GPU 完成回调据此早退,避免 UAF
@@ -57,6 +58,10 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   int _dupSincePrint;       // 本窗口内 ts 与上一帧相同(重复处理同一解码帧)的次数
   int64_t _minDtsUs;        // 本窗口内帧间 ts 步进的最小/最大(看节奏是否均匀)
   int64_t _maxDtsUs;
+  double _procMsSum;        // 本窗口内 process_frame 累计耗时(/60=均值,看是否 >16.6ms)
+  double _texMsSum;         // 本窗口内 CVMetalTextureCache 创建累计耗时
+  double _renderMsSum;      // 本窗口内 MDK renderVideo(解码)累计耗时
+  int _renderMsCount;       // renderVideo 调用次数(含无新帧的轮询,用于看解码是否拖)
 }
 
 - (instancetype)initWithStabilizer:(void *_Nullable)stabilizer {
@@ -68,10 +73,11 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
     _outH = 0;
     _inW = 0;
     _inH = 0;
-    _link = nil;
     _registry = nil;
     _textureId = -1;
     _lock = [[NSLock alloc] init];
+    _renderQueue = dispatch_queue_create("com.runcam.preview.render", DISPATCH_QUEUE_SERIAL);
+    _renderLoopRunning = NO;
     _device = nil;
     _queue = nil;
     _texCache = NULL;
@@ -175,7 +181,7 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   _player->setRenderAPI(&_mdkRenderAPI);
   _player->setAspectRatio(mdk::KeepAspectRatio);
 
-  // renderCallback 在此驱动模式下非必需(由 CADisplayLink onFrame 轮询 renderVideo),
+  // renderCallback 在此驱动模式下非必需(由 _renderQueue 上的 renderTick 背靠背调 renderVideo),
   // 仍按 ViewController 结构注册一个空回调(切勿在回调内调 renderVideo,会死锁)。
   _player->setRenderCallback([](void *) {});
 
@@ -207,41 +213,64 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   return (int64_t)produce * 1000 + composite;
 }
 
-#pragma mark - 60Hz 驱动:解码 + 防抖
+#pragma mark - 背靠背连续渲驱动:解码 + 防抖
 
 - (void)play {
   if (_player) { _player->set(mdk::State::Playing); }
-  if (_link) {
-    _link.paused = NO;
-    return;
-  }
-  _link = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrame)];
-  if (@available(iOS 15.0, *)) {
-    _link.preferredFrameRateRange = CAFrameRateRangeMake(60, 60, 60);
-  }
-  [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+  [_lock lock];
+  if (_renderLoopRunning || _tornDown) { [_lock unlock]; return; } // 已在跑/已销毁
+  _renderLoopRunning = YES;
+  [_lock unlock];
+  dispatch_async(_renderQueue, ^{ [self renderTick]; }); // 在渲染队列上启动循环
 }
 
 - (void)pause {
   if (_player) { _player->set(mdk::State::Paused); }
-  _link.paused = YES;
+  [_lock lock];
+  _renderLoopRunning = NO; // 循环下一轮自停(省电);play 再起一个新循环
+  [_lock unlock];
 }
 
-// 每帧:MDK 渲染到 _mdkInput → gyroflow 防抖渲染到 _pool[_next] 的 CVPB-backed 纹理。
-// GPU 完成栅栏触发后才把该张设为 _latest 并通知 Flutter。
-- (void)onFrame {
-  if (!_player) { return; }
+// 渲染循环一拍:渲一帧 → 渲完立刻排下一拍(背靠背,不被 60Hz tick 量化 → 节奏均匀如原生)。
+// 无新解码帧(轻量片/暂停边界)则延后 4ms 再排,避免空转占满 CPU。
+// 全程在 _renderQueue 串行执行,同一时刻只有一拍在跑。
+- (void)renderTick {
+  [_lock lock];
+  if (_tornDown || !_renderLoopRunning) { [_lock unlock]; return; } // 停止:不渲、不再排
+  [_lock unlock];
+
+  BOOL produced = [self renderOneFrame];
+
+  [_lock lock];
+  BOOL keepGoing = !_tornDown && _renderLoopRunning;
+  [_lock unlock];
+  if (!keepGoing) { return; }
+  if (produced) {
+    dispatch_async(_renderQueue, ^{ [self renderTick]; });
+  } else {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_MSEC),
+                   _renderQueue, ^{ [self renderTick]; });
+  }
+}
+
+// 在 _renderQueue 上渲一帧:MDK 解码 → process_frame 防抖 → 三缓冲 CVPB → 通知 Flutter。
+// 返回 YES=本拍产出了新帧(背靠背立刻渲下一拍);NO=无新解码帧/失败(延后再试,避免空转)。
+- (BOOL)renderOneFrame {
+  if (!_player) { return NO; }
 
   // MDK 渲染目标指向解码纹理,然后驱动一次解码渲染。renderVideo 返回秒(<0 = 无可渲染帧)。
   self.currentRenderTarget = _mdkInput;
+  CFTimeInterval renderT0 = CACurrentMediaTime();
   double ts = _player->renderVideo();
-  if (ts < 0.0) { return; }
+  _renderMsSum += (CACurrentMediaTime() - renderT0) * 1000.0;
+  _renderMsCount++;
+  if (ts < 0.0) { return NO; }
   int64_t tsUs = (int64_t)llround(ts * 1.0e6);
 
   // 30fps 源 / 60Hz 驱动:renderVideo 必须每 tick 调(驱动 MDK 解码),但 ts 没变 = 还是上一帧,
   // 重复 process 纯浪费一倍 GPU(produce~2x),偶发把单 tick 顶过 16.6ms → 掉显示帧 = 卡顿。
   // 同一解码帧只 process 一次;Flutter 由 Dart ticker 维持 60Hz 合成,_latest 不变即按住前帧。
-  if (tsUs == _lastProcessedTsUs) { return; }
+  if (tsUs == _lastProcessedTsUs) { return NO; } // 无新帧 → 上层延后再试
   _lastProcessedTsUs = tsUs;
 
   // 取下一张输出缓冲,并在锁内**立即推进** _next(取帧时推进,而非完成回调里):
@@ -251,33 +280,37 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   _next = (_next + 1) % PREVIEW_POOL_N;
   CVPixelBufferRef pb = _pool[idx];
   [_lock unlock];
-  if (!pb) { return; }
+  if (!pb) { return NO; }
 
   // CVPB → MTLTexture(零拷贝)。注意:CVMetalTextureCache 产出的纹理是否带 RenderTarget
   // usage 取决于 IOSurface/系统;若 process_frame 渲染失败,这是头号嫌疑(见回报)。
   CVMetalTextureRef cvtex = NULL;
+  CFTimeInterval texT0 = CACurrentMediaTime();
   CVReturn rc = CVMetalTextureCacheCreateTextureFromImage(
       kCFAllocatorDefault, _texCache, pb, NULL,
       MTLPixelFormatBGRA8Unorm, _outW, _outH, 0, &cvtex);
+  _texMsSum += (CACurrentMediaTime() - texT0) * 1000.0;
   if (rc != kCVReturnSuccess || !cvtex) {
     NSLog(@"[preview] CVMetalTextureCacheCreateTextureFromImage failed rc=%d", (int)rc);
     if (cvtex) { CFRelease(cvtex); }
-    return;
+    return NO;
   }
   id<MTLTexture> outputTex = CVMetalTextureGetTexture(cvtex);
 
   if (_stabilizer) {
     GyroflowProcessInfo info = {0};
+    CFTimeInterval procT0 = CACurrentMediaTime();
     int32_t r = gyroflow_process_frame_metal_bgra8(
         (GyroflowStabilizer *)_stabilizer,
         tsUs, -1,
         (__bridge void *)_mdkInput, (size_t)_inW, (size_t)_inH,
         (__bridge void *)outputTex, (size_t)_outW, (size_t)_outH,
         (__bridge void *)_queue, &info);
+    _procMsSum += (CACurrentMediaTime() - procT0) * 1000.0;
     if (r != 0) {
       NSLog(@"[preview] process_frame_metal_bgra8 failed: %s", gyroflow_last_error());
       CFRelease(cvtex);
-      return;
+      return NO;
     }
     // 节奏诊断(仅日志,printf 走 stdout):每秒统计帧间 ts 步进与重复帧。
     //   30fps 视频理想:每个唯一帧 process 一次,dts≈33333us、dup≈0;
@@ -291,9 +324,13 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
     }
     _lastProbeTsUs = tsUs;
     if ((_fovProbeN++ % 60) == 0) {
-      printf("[preview][pace] dup/60=%d  dts(min..max)=%lld..%lldus  fov=%.3f\n",
-             _dupSincePrint, (long long)_minDtsUs, (long long)_maxDtsUs, info.fov);
+      double renderAvg = _renderMsCount > 0 ? _renderMsSum / _renderMsCount : 0.0;
+      printf("[preview][pace] dts(min..max)=%lld..%lldus  render avg=%.1fms(n=%d)  proc avg=%.1fms  tex avg=%.1fms  out=%dx%d\n",
+             (long long)_minDtsUs, (long long)_maxDtsUs,
+             renderAvg, _renderMsCount, _procMsSum / 60.0, _texMsSum / 60.0, _outW, _outH);
       _dupSincePrint = 0; _minDtsUs = 0; _maxDtsUs = 0;
+      _procMsSum = 0; _texMsSum = 0;
+      _renderMsSum = 0; _renderMsCount = 0;
       fflush(stdout);
     }
   }
@@ -320,6 +357,7 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   }];
   [cb commit];
   CFRelease(cvtex);
+  return YES; // 产出了新帧 → 上层背靠背立刻渲下一拍
 }
 
 - (void)seekToUs:(int64_t)timestampUs {
@@ -339,12 +377,15 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   // 先置 _tornDown 并清 _registry(锁内):在飞的 GPU 完成回调据此早退,
   // 不再写 _latest / 不通知 Flutter,避免触碰下面 releasePool 释放掉的 pool。
   [_lock lock];
-  _tornDown = YES;
+  _tornDown = YES;          // 渲染循环下一拍会据此停止、不再 re-dispatch
+  _renderLoopRunning = NO;
   _registry = nil;
   [_lock unlock];
-  if (_link) {
-    [_link invalidate];
-    _link = nil;
+  // 排空渲染队列:等在飞的 renderOneFrame 跑完,再释放 _player/_pool/_mdkInput,
+  // 否则渲染线程会碰到下面释放掉的资源(UAF)。_tornDown 已置位 → 队列里至多再跑一拍
+  // 就停,sync 必能排到。从主线程 sync 等队列不死锁(renderTick 只 async/after,不反向 sync)。
+  if (_renderQueue) {
+    dispatch_sync(_renderQueue, ^{});
   }
   if (_player) {
     _player->set(mdk::State::Stopped);
