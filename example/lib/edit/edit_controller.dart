@@ -16,6 +16,7 @@ class EditController extends ChangeNotifier {
   late final ParamsModel params;
 
   String? uri;
+  VideoInfo? videoInfo; // openVideo 回的视频元数据,供「输入」面板显示
   PreviewBackend backend = PreviewBackend.texture;
   bool playing = false;
   bool busy = false;
@@ -39,6 +40,7 @@ class EditController extends ChangeNotifier {
       await _bridge.setGyroOffset(48.0); // raw-IMU 机型默认补偿(阶段4 autosync 替)
       await params.pushAllDefaultsAndRecompute();
       uri = picked;
+      videoInfo = info;
       final ow = info.outputWidth ?? 16, oh = info.outputHeight ?? 9;
       aspect = oh > 0 ? ow / oh : 16 / 9;
       await _startBackend();
@@ -80,6 +82,22 @@ class EditController extends ChangeNotifier {
   void onPlatformViewCreated(int id) {
     _pvChannel = MethodChannel('runcam_gf/preview_pv_$id');
   }
+
+  /// 文件名(uri 末段,可能是 content:// 或文件路径)。
+  String? get videoName {
+    final u = uri;
+    if (u == null) return null;
+    final seg = Uri.tryParse(u)?.pathSegments;
+    if (seg != null && seg.isNotEmpty && seg.last.isNotEmpty) return seg.last;
+    return u.split('/').last;
+  }
+
+  /// 是否检测到陀螺(由 recompute 回填的最大修正角推断,maxAngle>0=有校正量)。
+  bool get hasGyro =>
+      params.maxAnglePitch.abs() +
+          params.maxAngleYaw.abs() +
+          params.maxAngleRoll.abs() >
+      0.01;
 
   Future<void> _startBackend() async {
     if (backend == PreviewBackend.texture) {

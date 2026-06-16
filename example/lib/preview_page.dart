@@ -4,6 +4,7 @@ import 'edit/gyro_widgets.dart';
 import 'edit/gyroflow_theme.dart';
 import 'edit/preview_backend.dart';
 import 'edit/preview_view.dart';
+import 'edit/panels/input_panel.dart';
 import 'edit/panels/stabilize_panel.dart';
 
 /// 阶段3 切片1:Flutter 编辑页(布局/样式对齐原生 gyroflow:全屏深色 + 大橙按钮 + 底部 Tab)。
@@ -17,7 +18,7 @@ class PreviewPage extends StatefulWidget {
 class _PreviewPageState extends State<PreviewPage>
     with SingleTickerProviderStateMixin {
   final EditController _c = EditController();
-  int _tab = 1; // 0=输入 1=参数 2=导出;本切片默认「参数」展示 Stabilize
+  int _tab = 0; // 0=输入 1=参数 2=导出(对齐原生默认「输入」)
   late final AnimationController _ticker = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 1),
@@ -120,19 +121,22 @@ class _PreviewPageState extends State<PreviewPage>
   }
 
   Widget _tabContent() {
-    if (_tab == 1) {
-      return _c.uri == null
-          ? const Center(
-              child: Text('选视频后可调参',
-                  style: TextStyle(color: GfColors.textSecondary)))
-          : StabilizePanel(model: _c.params);
+    switch (_tab) {
+      case 0:
+        return InputPanel(controller: _c);
+      case 1:
+        return _c.uri == null
+            ? const Center(
+                child: Text('选视频后可调参',
+                    style: TextStyle(color: GfColors.textSecondary)))
+            : StabilizePanel(model: _c.params);
+      default:
+        return Container(
+          color: GfColors.bgPanel,
+          alignment: Alignment.center,
+          child: const Text('「导出」面板:后续切片',
+              style: TextStyle(color: GfColors.textSecondary)),
+        );
     }
-    final name = _tab == 0 ? '输入' : '导出';
-    return Container(
-      color: GfColors.bgPanel,
-      alignment: Alignment.center,
-      child: Text('「$name」面板:后续切片',
-          style: const TextStyle(color: GfColors.textSecondary)),
-    );
   }
 }
