@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/runner/work/mdk-sdk/mdk-sdk/mdk/build/iOSSimulator/mdk.framework/mdk'
+relocations:     []
+...

@@ -1,0 +1,32 @@
+[package]
+name = "runcam_gyroflow"
+version = "0.1.0"
+edition = "2021"
+description = "安卓 JNI 桥: Kotlin → gyroflow_core。只新增,不改 gyroflow 上游源码。"
+
+[lib]
+name = "runcam_gyroflow"
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.22"
+# 把 gyroflow 的 log:: 输出 + 自定义诊断接到 Android logcat(调试用)
+log = "0.4"
+android_logger = "0.14"
+# ndk_context: 复刻上游 set_android_context,给核心(app_dirs2 安卓实现)提供 Context。
+# 版本与 gyroflow-core 用的对齐(0.1.1),cargo 会统一为同一份。
+ndk-context = "0.1.1"
+
+# —— 阶段 2a: GPU 预览(wgpu→SurfaceView)。版本全部与 gyroflow-core 对齐,避免重复/冲突 ——
+wgpu = "29"                                              # 与 core 同版,统一为一份
+bytemuck = "1"                                           # KernelParams/COEFFS 的 Pod 转字节
+serde_json = "1"                                         # 镜头搜索结果 JSON
+itertools = "0.14"                                       # autosync on_finished 回调的 Either 类型(与 core 对齐)
+raw-window-handle = "0.6"                                # wgpu 29 对应 rwh 0.6
+nalgebra = "0.34"                                        # set_background_color 收 Vector4<f32>, 与 core 对齐统一为一份
+ndk = { version = "0.9.0", features = ["api-level-26"] } # ANativeWindow::from_surface
+pollster = "0.4"                                         # block_on(adapter/device 请求)
+
+# 只读引用 gyroflow 源码(留在 Downloads)。开 use-opencv —— autosync 用 OpenCV(DIS 光流 +
+# findEssentialMat),链官方预编译 OpenCV Android SDK(见 scripts/build_gyroflow_android.sh 的 OPENCV_* 环境变量)。
+gyroflow-core = { path = "/Users/gdm/Downloads/gyroflow-master5.6ios/src/core", features = ["use-opencv"] }
