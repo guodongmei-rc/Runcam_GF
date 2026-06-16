@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'edit/edit_controller.dart';
+import 'edit/gyroflow_theme.dart';
 import 'edit/preview_backend.dart';
 import 'edit/preview_view.dart';
 import 'edit/panels/stabilize_panel.dart';
@@ -39,7 +40,15 @@ class _PreviewPageState extends State<PreviewPage>
 
   @override
   Widget build(BuildContext context) {
+    return Theme(
+      data: gyroflowTheme(),
+      child: Builder(builder: _buildScaffold),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
+      backgroundColor: GfColors.bg,
       appBar: AppBar(
         title: const Text('编辑页 (dev)'),
         actions: [

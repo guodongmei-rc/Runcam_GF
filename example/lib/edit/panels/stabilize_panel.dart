@@ -1,90 +1,140 @@
 import 'package:flutter/material.dart';
 import 'package:runcam_gf/runcam_gf.dart';
+import '../gyro_widgets.dart';
+import '../gyroflow_theme.dart';
 
-/// Stabilize 面板:只通过 [model] 调参(clamp→推引擎→200ms 防抖→recompute→回填)。
-/// 不引用任何预览后端。
-class StabilizePanel extends StatelessWidget {
+/// Stabilize 面板:结构/样式对齐原生 `GyroflowStabilizePanel`(深色 + 橙)。
+/// 只通过 [model] 调参,不引用任何预览后端。平滑度/锁定量以 0–100% 显示、内部 0–1。
+class StabilizePanel extends StatefulWidget {
   const StabilizePanel({super.key, required this.model});
   final ParamsModel model;
+  @override
+  State<StabilizePanel> createState() => _StabilizePanelState();
+}
+
+class _StabilizePanelState extends State<StabilizePanel> {
+  bool _advExpanded = false;
+  ParamsModel get m => widget.model;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: model,
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _slider('平滑度', const Key('stab_smoothness'),
-              model.smoothness, 0, 1, (v) => model.smoothness = v),
-          SwitchListTile(
-            key: const Key('stab_per_axis'),
-            title: const Text('每轴平滑'),
-            value: model.perAxis,
-            onChanged: (v) => model.perAxis = v,
-          ),
-          if (model.perAxis) ...[
-            _slider('Pitch', const Key('stab_smoothness_pitch'),
-                model.smoothnessPitch, 0, 1, (v) => model.smoothnessPitch = v),
-            _slider('Yaw', const Key('stab_smoothness_yaw'),
-                model.smoothnessYaw, 0, 1, (v) => model.smoothnessYaw = v),
-            _slider('Roll', const Key('stab_smoothness_roll'),
-                model.smoothnessRoll, 0, 1, (v) => model.smoothnessRoll = v),
-          ],
-          const Divider(),
-          SwitchListTile(
-            key: const Key('stab_horizon'),
-            title: const Text('地平线锁定'),
-            value: model.horizonLock,
-            onChanged: (v) => model.horizonLock = v,
-          ),
-          if (model.horizonLock) ...[
-            _slider('锁定量', const Key('stab_horizon_amount'),
-                model.horizonLockAmount, 0, 1, (v) => model.horizonLockAmount = v),
-            _slider('Roll', const Key('stab_horizon_roll'),
-                model.horizonLockRoll, -180, 180, (v) => model.horizonLockRoll = v),
-          ],
-          const Divider(),
-          _slider('最大缩放 %', const Key('stab_max_zoom'),
-              model.maxZoomPercent, 100, 300, (v) => model.maxZoomPercent = v),
-          ListTile(
-            title: const Text('裁切模式'),
-            trailing: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('无')),
-                ButtonSegment(value: 1, label: Text('自适应')),
-                ButtonSegment(value: 2, label: Text('静态')),
-              ],
-              selected: {model.croppingMode},
-              onSelectionChanged: (s) => model.croppingMode = s.first,
+    return Container(
+      color: GfColors.bgPanel,
+      child: AnimatedBuilder(
+        animation: m,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+          children: [
+            GyroDropdown(
+              label: '平滑方式',
+              options: const ['无平滑', '默认', '纯3D', '固定摄像头'],
+              value: m.smoothingMethod.clamp(0, 3),
+              onChanged: (v) => m.smoothingMethod = v,
             ),
-          ),
-          _slider('镜头校正', const Key('stab_lens'),
-              model.lensCorrection, 0, 1, (v) => model.lensCorrection = v),
-          const Divider(),
-          Text('maxAngle P/Y/R = '
-              '${model.maxAnglePitch.toStringAsFixed(1)}/'
-              '${model.maxAngleYaw.toStringAsFixed(1)}/'
-              '${model.maxAngleRoll.toStringAsFixed(1)}°   '
-              'minFov=${model.minFov.toStringAsFixed(3)}'),
-        ],
-      ),
-    );
-  }
-
-  Widget _slider(String label, Key key, double value, double min, double max,
-      ValueChanged<double> onChanged) {
-    return Row(children: [
-      SizedBox(width: 90, child: Text(label)),
-      Expanded(
-        child: Slider(
-          key: key,
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          onChanged: onChanged,
+            // 按轴关→显示总平滑度;开→显示三轴(对齐原生互斥)。
+            if (!m.perAxis)
+              GyroSlider(
+                key: const Key('stab_smoothness'),
+                label: '平滑度', unit: '%', min: 0, max: 100,
+                value: m.smoothness * 100,
+                onChanged: (v) => m.smoothness = v / 100,
+              )
+            else ...[
+              GyroSlider(
+                key: const Key('stab_smoothness_pitch'),
+                label: 'Pitch 平滑度', unit: '%', min: 0, max: 100,
+                value: m.smoothnessPitch * 100,
+                onChanged: (v) => m.smoothnessPitch = v / 100,
+              ),
+              GyroSlider(
+                label: 'Yaw 平滑度', unit: '%', min: 0, max: 100,
+                value: m.smoothnessYaw * 100,
+                onChanged: (v) => m.smoothnessYaw = v / 100,
+              ),
+              GyroSlider(
+                label: 'Roll 平滑度', unit: '%', min: 0, max: 100,
+                value: m.smoothnessRoll * 100,
+                onChanged: (v) => m.smoothnessRoll = v / 100,
+              ),
+            ],
+            GyroAdvToggle(
+              label: '高级选项',
+              expanded: _advExpanded,
+              onTap: () => setState(() => _advExpanded = !_advExpanded),
+            ),
+            if (_advExpanded) ...[
+              GyroCheck(
+                key: const Key('stab_per_axis'),
+                label: '按轴',
+                value: m.perAxis,
+                onChanged: (v) => m.perAxis = v,
+              ),
+              GyroCheck(
+                label: '仅限修剪范围内',
+                value: m.trimRangeOnly,
+                onChanged: (v) => m.trimRangeOnly = v,
+              ),
+              GyroSlider(
+                label: '最大平滑度', unit: '秒', min: 0, max: 3, precision: 2,
+                value: m.maxSmoothnessSec,
+                onChanged: (v) => m.maxSmoothnessSec = v,
+              ),
+              GyroSlider(
+                label: '高速最大平滑度', unit: '秒', min: 0, max: 1, precision: 2,
+                value: m.alphaHighVelSec,
+                onChanged: (v) => m.alphaHighVelSec = v,
+              ),
+            ],
+            const Divider(),
+            GyroCheck(
+              key: const Key('stab_horizon'),
+              label: '锁定地平线',
+              value: m.horizonLock,
+              onChanged: (v) => m.horizonLock = v,
+            ),
+            if (m.horizonLock) ...[
+              GyroSlider(
+                label: '锁定量', unit: '%', min: 0, max: 100, precision: 0,
+                value: m.horizonLockAmount * 100,
+                onChanged: (v) => m.horizonLockAmount = v / 100,
+              ),
+              GyroSlider(
+                label: 'Roll 角度校正', unit: '°', min: -180, max: 180,
+                value: m.horizonLockRoll,
+                onChanged: (v) => m.horizonLockRoll = v,
+              ),
+            ],
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '最大旋转: Pitch ${m.maxAnglePitch.toStringAsFixed(1)}°, '
+                'Yaw ${m.maxAngleYaw.toStringAsFixed(1)}°, '
+                'Roll ${m.maxAngleRoll.toStringAsFixed(1)}°\n'
+                '最大缩放: ${(m.minFov > 0 ? 100 / m.minFov : 0).toStringAsFixed(1)}%',
+                style: const TextStyle(
+                    color: GfColors.textMuted, fontSize: 12, height: 1.5),
+              ),
+            ),
+            GyroDropdown(
+              label: '裁切',
+              options: const ['不缩放', '动态缩放', '静态裁剪'],
+              value: m.croppingMode.clamp(0, 2),
+              onChanged: (v) => m.croppingMode = v,
+            ),
+            GyroSlider(
+              label: '最大缩放', unit: '%', min: 100, max: 300, precision: 0,
+              value: m.maxZoomPercent,
+              onChanged: (v) => m.maxZoomPercent = v,
+            ),
+            GyroSlider(
+              label: '镜头校正', min: 0, max: 1, precision: 2,
+              value: m.lensCorrection,
+              onChanged: (v) => m.lensCorrection = v,
+            ),
+          ],
         ),
       ),
-      SizedBox(width: 56, child: Text(value.toStringAsFixed(2), textAlign: TextAlign.end)),
-    ]);
+    );
   }
 }

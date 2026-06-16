@@ -19,24 +19,28 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: StabilizePanel(model: model)),
     ));
-    final slider = find.byKey(const Key('stab_smoothness'));
-    expect(slider, findsOneWidget);
-    await tester.drag(slider, const Offset(200, 0)); // 往右拖
+    // 第一个 Slider = 平滑度(平滑方式是下拉,不是 Slider)。
+    await tester.drag(find.byType(Slider).first, const Offset(200, 0));
     await tester.pump();
     expect(model.smoothness, isNot(before)); // setter 即时改值=闭环第一步
     // 改值会排一个 200ms recompute 防抖定时器;让它触发完,避免 pending timer。
     await tester.pump(const Duration(milliseconds: 250));
   });
 
-  testWidgets('每轴开关默认关,打开后露出 P/Y/R 滑块', (tester) async {
+  testWidgets('展开高级→勾按轴 → 露出 Pitch、隐藏总平滑度', (tester) async {
     final model = ParamsModel(_NoopBridge());
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: StabilizePanel(model: model)),
     ));
     expect(find.byKey(const Key('stab_smoothness_pitch')), findsNothing);
+    expect(find.byKey(const Key('stab_smoothness')), findsOneWidget);
+    // 展开高级选项 → 勾「按轴」。
+    await tester.tap(find.text('高级选项'));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('stab_per_axis')));
     await tester.pump();
     expect(find.byKey(const Key('stab_smoothness_pitch')), findsOneWidget);
+    expect(find.byKey(const Key('stab_smoothness')), findsNothing);
     // perAxis setter 也排了 200ms recompute 定时器,触发完避免 pending timer。
     await tester.pump(const Duration(milliseconds: 250));
   });
