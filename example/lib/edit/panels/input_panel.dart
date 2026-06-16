@@ -138,7 +138,20 @@ class _InputPanelState extends State<InputPanel> {
             ),
           ),
         const SizedBox(height: 10),
-        _row('当前镜头', c.lensName),
+        // 当前镜头名很长 → 标签在上、名字整行换行。
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('当前镜头',
+                  style: TextStyle(color: GfColors.textSecondary, fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(c.lensName,
+                  style: const TextStyle(color: GfColors.text, fontSize: 14)),
+            ],
+          ),
+        ),
         for (final e in c.lensInfo.entries) _row(e.key, e.value),
         const SizedBox(height: 10),
         Row(children: [
@@ -247,13 +260,17 @@ class _InputPanelState extends State<InputPanel> {
     final isEmpty = value == '---';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(children: [
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
-        const Spacer(),
-        Text(value,
-            style: TextStyle(
-                color: isEmpty ? GfColors.textSecondary : GfColors.text, fontSize: 14)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(value,
+              textAlign: TextAlign.end, // 长值自动换行,不溢出
+              style: TextStyle(
+                  color: isEmpty ? GfColors.textSecondary : GfColors.text,
+                  fontSize: 14)),
+        ),
       ]),
     );
   }
