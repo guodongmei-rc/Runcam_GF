@@ -74,4 +74,7 @@ class EngineBridgeImpl implements EngineBridge {
 
   @override
   Future<StabInfo> recomputeBlocking() => _api.recomputeBlocking();
+
+  @override
+  Future<String> getVideoMetadata() => _api.getVideoMetadata();
 }

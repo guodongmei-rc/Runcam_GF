@@ -51,4 +51,8 @@ abstract class EngineBridge {
   Future<void> setShowOpticalFlow(bool show);
 
   Future<StabInfo> recomputeBlocking();
+
+  /// 视频内嵌元数据 JSON(录制参数:ISO/快门/光圈/Gamma 等,在
+  /// `additional_data.recording_settings` 下)。供「输入」面板显示。
+  Future<String> getVideoMetadata();
 }

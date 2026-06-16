@@ -54,6 +54,8 @@ class FakeEngineBridge implements EngineBridge {
   @override
   Future<void> setGyroOffset(double offsetMs) async {}
   @override
+  Future<String> getVideoMetadata() async => '{}';
+  @override
   Future<void> setImuLpf(double hz) async {
     imuLpfCalls.add(hz);
   }

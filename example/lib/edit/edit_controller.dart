@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart';
@@ -17,6 +19,7 @@ class EditController extends ChangeNotifier {
 
   String? uri;
   VideoInfo? videoInfo; // openVideo 回的视频元数据,供「输入」面板显示
+  Map<String, String> recordingSettings = {}; // 录制参数(ISO/快门/光圈…),供「输入」面板
   PreviewBackend backend = PreviewBackend.texture;
   bool playing = false;
   bool busy = false;
@@ -39,6 +42,7 @@ class EditController extends ChangeNotifier {
       await _bridge.setStabEnabled(true);
       await _bridge.setGyroOffset(48.0); // raw-IMU 机型默认补偿(阶段4 autosync 替)
       await params.pushAllDefaultsAndRecompute();
+      recordingSettings = await _fetchRecordingSettings();
       uri = picked;
       videoInfo = info;
       final ow = info.outputWidth ?? 16, oh = info.outputHeight ?? 9;
@@ -98,6 +102,20 @@ class EditController extends ChangeNotifier {
           params.maxAngleYaw.abs() +
           params.maxAngleRoll.abs() >
       0.01;
+
+  /// 读视频元数据 JSON → additional_data.recording_settings(英文键→值字符串)。
+  /// 解析失败/无该段 → 空,「输入」面板就不显示这些行。
+  Future<Map<String, String>> _fetchRecordingSettings() async {
+    try {
+      final root = jsonDecode(await _bridge.getVideoMetadata());
+      final add = root is Map ? root['additional_data'] : null;
+      final rs = add is Map ? add['recording_settings'] : null;
+      if (rs is Map) {
+        return rs.map((k, v) => MapEntry('$k', '$v'));
+      }
+    } catch (_) {/* 元数据缺失/格式异常 → 不显示录制参数 */}
+    return {};
+  }
 
   Future<void> _startBackend() async {
     if (backend == PreviewBackend.texture) {

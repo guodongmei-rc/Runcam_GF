@@ -44,6 +44,8 @@ class InputPanel extends StatelessWidget {
             _row('音频', '---'),
             _row('旋转', loaded ? '0°' : '---'),
             _row('包含陀螺仪数据', loaded ? (c.hasGyro ? 'Yes' : 'No') : '---'),
+            // 录制参数(有内嵌元数据的视频才有:ISO/快门/光圈/Gamma…)。
+            ..._recordingRows(c.recordingSettings),
             const SizedBox(height: 22),
             _title('镜头配置文件'),
             const SizedBox(height: 8),
@@ -57,6 +59,37 @@ class InputPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// recording_settings(英文键)→ 原生同款中文行,缺失键不显示,未映射键按原 key 兜底。
+  List<Widget> _recordingRows(Map<String, String> rs) {
+    if (rs.isEmpty) return const [];
+    const mapping = <String, String>{
+      'Focal length': '焦距',
+      'Focus mode': '对焦方式',
+      'Iris': '光圈',
+      'ISO': 'ISO',
+      'Shutter angle': '快门角度',
+      'Shutter speed': '快门速度',
+      'Exposure': '曝光',
+      'White balance mode': '白平衡模式',
+      'White balance': '白平衡',
+      'Color primaries': '色彩原色',
+      'Gamma equation': 'Gamma 曲线',
+    };
+    final rows = <Widget>[];
+    final shown = <String>{};
+    mapping.forEach((key, label) {
+      final v = rs[key];
+      if (v != null && v.isNotEmpty) {
+        rows.add(_row(label, v));
+        shown.add(key);
+      }
+    });
+    rs.forEach((k, v) {
+      if (!shown.contains(k) && v.isNotEmpty) rows.add(_row(k, v));
+    });
+    return rows;
   }
 
   Widget _title(String t) => Text(t,
