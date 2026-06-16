@@ -56,6 +56,10 @@ class FakeEngineBridge implements EngineBridge {
   @override
   Future<String> getVideoMetadata() async => '{}';
   @override
+  Future<void> setImuOrientation(String orientation) async {}
+  @override
+  Future<void> setIntegrationMethod(int index) async {}
+  @override
   Future<void> setImuLpf(double hz) async {
     imuLpfCalls.add(hz);
   }

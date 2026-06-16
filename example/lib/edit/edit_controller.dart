@@ -25,6 +25,12 @@ class EditController extends ChangeNotifier {
   bool busy = false;
   String status = '点「选视频」开始';
 
+  // 运动数据设置(「输入」面板)。
+  String imuOrientation = 'XYZ';
+  int integrationMethod = 1; // 0=None 1=Comp 2=VQF 3=Madgwick
+  bool orientationIndicator = false; // 纯显示偏好(暂不接引擎)
+  bool get imuLpfOn => params.imuLpfHz > 0;
+
   // Texture 后端
   int? textureId;
   double aspect = 16 / 9;
@@ -102,6 +108,30 @@ class EditController extends ChangeNotifier {
           params.maxAngleYaw.abs() +
           params.maxAngleRoll.abs() >
       0.01;
+
+  /// 低通滤波器开关:开=50Hz、关=0(params 自带 push+recompute)。
+  void setImuLpfOn(bool on) => params.imuLpfHz = on ? 50.0 : 0.0;
+
+  /// IMU 朝向(如 XYZ/ZyX)→ 引擎 + recompute。
+  Future<void> setImuOrientationStr(String v) async {
+    imuOrientation = v;
+    await _bridge.setImuOrientation(v);
+    await _bridge.recomputeBlocking();
+    notifyListeners();
+  }
+
+  /// 积分方法 → 引擎 + recompute。
+  Future<void> setIntegration(int v) async {
+    integrationMethod = v;
+    await _bridge.setIntegrationMethod(v);
+    await _bridge.recomputeBlocking();
+    notifyListeners();
+  }
+
+  void setOrientationIndicator(bool on) {
+    orientationIndicator = on;
+    notifyListeners();
+  }
 
   /// 读视频元数据 JSON → additional_data.recording_settings(英文键→值字符串)。
   /// 解析失败/无该段 → 空,「输入」面板就不显示这些行。

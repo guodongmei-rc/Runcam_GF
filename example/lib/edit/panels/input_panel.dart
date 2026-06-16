@@ -3,24 +3,31 @@ import '../edit_controller.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
 
-/// 「输入」面板:对齐原生「视频信息 + 镜头配置文件」。
-/// 文件名/尺寸/时长/帧速率来自 VideoInfo;编码/像素/旋转 同原生写死;
-/// 陀螺由 recompute 回填的 maxAngle 推断;相机/镜头待后续接镜头信息读取。
-class InputPanel extends StatelessWidget {
+/// 「输入」面板:对齐原生「视频信息 + 镜头配置文件 + 运动数据」。
+/// 已接引擎:低通滤波器 / IMU 朝向 / 积分方法 / 方向指示器(显示偏好)。
+/// 标「后续」的(镜头搜索·打开·创建、运动数据文件、Median filter、旋转、陀螺仪偏差、统计/导出)
+/// 需文件选择器或尚未接的桥方法,先按原生样子摆上并禁用。
+class InputPanel extends StatefulWidget {
   const InputPanel({super.key, required this.controller});
   final EditController controller;
+  @override
+  State<InputPanel> createState() => _InputPanelState();
+}
+
+class _InputPanelState extends State<InputPanel> {
+  late final TextEditingController _imu =
+      TextEditingController(text: widget.controller.imuOrientation);
+
+  EditController get c => widget.controller;
+
+  @override
+  void dispose() {
+    _imu.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final c = controller;
-    final vi = c.videoInfo;
-    final loaded = c.uri != null;
-    final size = (vi?.width != null && vi?.height != null)
-        ? '${vi!.width}×${vi.height}'
-        : '---';
-    final dur = vi?.durationS != null ? '${vi!.durationS!.toStringAsFixed(2)} s' : '---';
-    final fps = vi?.fps != null ? '${vi!.fps!.toStringAsFixed(3)} fps' : '---';
-
     return Container(
       color: GfColors.bgPanel,
       child: AnimatedBuilder(
@@ -28,40 +35,119 @@ class InputPanel extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
           children: [
-            _title('视频信息'),
-            const SizedBox(height: 10),
-            GyroBigButton(
-                label: '打开文件', onPressed: c.busy ? null : c.openAndStart),
-            const SizedBox(height: 6),
-            _row('文件名称', c.videoName ?? '---'),
-            _row('检测到的相机', '---'),
-            _row('检测镜头', '---'),
-            _row('尺寸', size),
-            _row('时长', dur),
-            _row('帧速率', fps),
-            _row('编码解码器', loaded ? 'H.264' : '---'),
-            _row('像素格式', loaded ? 'YUV420P' : '---'),
-            _row('音频', '---'),
-            _row('旋转', loaded ? '0°' : '---'),
-            _row('包含陀螺仪数据', loaded ? (c.hasGyro ? 'Yes' : 'No') : '---'),
-            // 录制参数(有内嵌元数据的视频才有:ISO/快门/光圈/Gamma…)。
-            ..._recordingRows(c.recordingSettings),
+            ..._videoInfo(),
             const SizedBox(height: 22),
-            _title('镜头配置文件'),
-            const SizedBox(height: 8),
-            _row('当前镜头', '---'),
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text('镜头搜索 / 加载:后续切片',
-                  style: TextStyle(color: GfColors.textSecondary, fontSize: 12)),
-            ),
+            ..._lensProfile(),
+            const SizedBox(height: 22),
+            ..._motionData(),
           ],
         ),
       ),
     );
   }
 
-  /// recording_settings(英文键)→ 原生同款中文行,缺失键不显示,未映射键按原 key 兜底。
+  // ---- 视频信息 ----
+  List<Widget> _videoInfo() {
+    final vi = c.videoInfo;
+    final loaded = c.uri != null;
+    final size = (vi?.width != null && vi?.height != null)
+        ? '${vi!.width}×${vi.height}'
+        : '---';
+    final dur = vi?.durationS != null ? '${vi!.durationS!.toStringAsFixed(2)} s' : '---';
+    final fps = vi?.fps != null ? '${vi!.fps!.toStringAsFixed(3)} fps' : '---';
+    return [
+      _title('视频信息'),
+      const SizedBox(height: 10),
+      GyroBigButton(label: '打开文件', onPressed: c.busy ? null : c.openAndStart),
+      const SizedBox(height: 6),
+      _row('文件名称', c.videoName ?? '---'),
+      _row('检测到的相机', '---'),
+      _row('检测镜头', '---'),
+      _row('尺寸', size),
+      _row('时长', dur),
+      _row('帧速率', fps),
+      _row('编码解码器', loaded ? 'H.264' : '---'),
+      _row('像素格式', loaded ? 'YUV420P' : '---'),
+      _row('音频', '---'),
+      _row('旋转', loaded ? '0°' : '---'),
+      _row('包含陀螺仪数据', loaded ? (c.hasGyro ? 'Yes' : 'No') : '---'),
+      ..._recordingRows(c.recordingSettings),
+    ];
+  }
+
+  // ---- 镜头配置文件 ----
+  List<Widget> _lensProfile() => [
+        _title('镜头配置文件'),
+        const SizedBox(height: 10),
+        _disabledSearch('搜索…'),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _disabledButton('打开文件')),
+          const SizedBox(width: 12),
+          Expanded(child: _disabledButton('创建新的')),
+        ]),
+      ];
+
+  // ---- 运动数据 ----
+  List<Widget> _motionData() => [
+        _title('运动数据'),
+        const SizedBox(height: 10),
+        Center(child: SizedBox(width: 180, child: _disabledButton('打开文件'))),
+        const SizedBox(height: 8),
+        _row('检测到的格式', '---'),
+        _row('文件名称', '---'),
+        const SizedBox(height: 4),
+        GyroCheck(
+            label: '低通滤波器', value: c.imuLpfOn, onChanged: c.setImuLpfOn),
+        _disabledCheck('Median filter'),
+        _disabledCheck('旋转'),
+        _disabledCheck('陀螺仪偏差'),
+        const SizedBox(height: 6),
+        _imuOrientationRow(),
+        const SizedBox(height: 6),
+        GyroDropdown(
+          label: '积分方法',
+          options: const ['None', 'Complementary', 'VQF', 'Madgwick'],
+          value: c.integrationMethod.clamp(0, 3),
+          onChanged: c.setIntegration,
+        ),
+        const SizedBox(height: 4),
+        GyroCheck(
+            label: '方向指示器',
+            value: c.orientationIndicator,
+            onChanged: c.setOrientationIndicator),
+        const SizedBox(height: 12),
+        Center(
+          child: Text('统计   导出  (后续)',
+              style: TextStyle(
+                  color: GfColors.textSecondary.withValues(alpha: 0.6), fontSize: 13)),
+        ),
+      ];
+
+  Widget _imuOrientationRow() => Row(children: [
+        const SizedBox(
+            width: 104,
+            child: Text('IMU 朝向',
+                style: TextStyle(color: GfColors.textSecondary, fontSize: 13))),
+        Expanded(
+          child: TextField(
+            controller: _imu,
+            style: const TextStyle(color: GfColors.text, fontSize: 14),
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: GfColors.inputBg,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+            ),
+            onSubmitted: (v) => c.setImuOrientationStr(v.trim()),
+          ),
+        ),
+      ]);
+
+  // ---- recording_settings 行 ----
   List<Widget> _recordingRows(Map<String, String> rs) {
     if (rs.isEmpty) return const [];
     const mapping = <String, String>{
@@ -92,6 +178,7 @@ class InputPanel extends StatelessWidget {
     return rows;
   }
 
+  // ---- 通用小部件 ----
   Widget _title(String t) => Text(t,
       style: const TextStyle(
           color: GfColors.text, fontSize: 18, fontWeight: FontWeight.bold));
@@ -100,17 +187,55 @@ class InputPanel extends StatelessWidget {
     final isEmpty = value == '---';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Text(label,
-              style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
-          const Spacer(),
-          Text(value,
-              style: TextStyle(
-                  color: isEmpty ? GfColors.textSecondary : GfColors.text,
-                  fontSize: 14)),
-        ],
-      ),
+      child: Row(children: [
+        Text(label,
+            style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
+        const Spacer(),
+        Text(value,
+            style: TextStyle(
+                color: isEmpty ? GfColors.textSecondary : GfColors.text, fontSize: 14)),
+      ]),
     );
   }
+
+  // 「后续」占位:搜索框 / 按钮 / 复选框,禁用灰显。
+  Widget _disabledSearch(String hint) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+            color: GfColors.inputBg.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8)),
+        child: Row(children: [
+          Text(hint,
+              style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
+          const Spacer(),
+          const Icon(Icons.search, color: GfColors.textSecondary, size: 18),
+        ]),
+      );
+
+  Widget _disabledButton(String label) => Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+            color: GfColors.bgBar, borderRadius: BorderRadius.circular(8)),
+        child: Text('$label(后续)',
+            style: const TextStyle(color: GfColors.textSecondary, fontSize: 14)),
+      );
+
+  Widget _disabledCheck(String label) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+                border: Border.all(
+                    color: GfColors.textSecondary.withValues(alpha: 0.4), width: 2),
+                borderRadius: BorderRadius.circular(4)),
+          ),
+          const SizedBox(width: 10),
+          Text('$label(后续)',
+              style: TextStyle(
+                  color: GfColors.textSecondary.withValues(alpha: 0.6), fontSize: 14)),
+        ]),
+      );
 }

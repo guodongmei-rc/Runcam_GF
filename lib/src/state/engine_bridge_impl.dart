@@ -77,4 +77,12 @@ class EngineBridgeImpl implements EngineBridge {
 
   @override
   Future<String> getVideoMetadata() => _api.getVideoMetadata();
+
+  @override
+  Future<void> setImuOrientation(String orientation) =>
+      _api.setImuOrientation(orientation);
+
+  @override
+  Future<void> setIntegrationMethod(int index) =>
+      _api.setIntegrationMethod(index);
 }

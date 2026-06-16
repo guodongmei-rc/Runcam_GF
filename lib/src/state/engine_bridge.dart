@@ -55,4 +55,8 @@ abstract class EngineBridge {
   /// 视频内嵌元数据 JSON(录制参数:ISO/快门/光圈/Gamma 等,在
   /// `additional_data.recording_settings` 下)。供「输入」面板显示。
   Future<String> getVideoMetadata();
+
+  /// 运动数据设置(「输入」面板用)。改完需调用方 recompute。
+  Future<void> setImuOrientation(String orientation); // 如 "XYZ" / "ZyX"
+  Future<void> setIntegrationMethod(int index); // 0=None 1=Comp 2=VQF 3=Madgwick
 }
