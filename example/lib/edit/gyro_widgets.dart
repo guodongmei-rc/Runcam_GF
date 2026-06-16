@@ -146,6 +146,89 @@ class GyroDropdown extends StatelessWidget {
   }
 }
 
+/// 原生同款大号橙色按钮(暂停 / 开启防抖 那种,全宽、半透明白字)。
+class GyroBigButton extends StatelessWidget {
+  const GyroBigButton(
+      {super.key, required this.label, required this.onPressed});
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return SizedBox(
+      height: 52,
+      child: Material(
+        color: enabled ? GfColors.accent : GfColors.accent.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onPressed,
+          child: Center(
+            child: Text(label,
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: enabled ? 0.95 : 0.55),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 原生同款底部 Tab(输入 / 参数 / 导出),选中=橙色 + 下划线。
+class GyroTabBar extends StatelessWidget {
+  const GyroTabBar(
+      {super.key, required this.index, required this.onChanged, required this.tabs});
+  final int index;
+  final ValueChanged<int> onChanged;
+  final List<({IconData icon, String label})> tabs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: GfColors.bgTab,
+      child: Row(
+        children: [
+          for (var i = 0; i < tabs.length; i++)
+            Expanded(
+              child: InkWell(
+                onTap: () => onChanged(i),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: i == index ? GfColors.accent : Colors.transparent,
+                        width: 2.5,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(tabs[i].icon,
+                          size: 20,
+                          color: i == index ? GfColors.accent : GfColors.textSecondary),
+                      const SizedBox(height: 3),
+                      Text(tabs[i].label,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: i == index
+                                  ? GfColors.accent
+                                  : GfColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 高级选项展开行(灰字 + 展开箭头)。
 class GyroAdvToggle extends StatelessWidget {
   const GyroAdvToggle(
