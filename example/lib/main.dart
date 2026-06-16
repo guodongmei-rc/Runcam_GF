@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 
 import 'preview_page.dart';
+import 'preview_platformview_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -108,6 +109,13 @@ class _HomePageState extends State<HomePage> {
                 MaterialPageRoute(builder: (_) => const PreviewPage()),
               ),
               child: const Text('预览 Texture spike (dev)'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PreviewPlatformViewPage()),
+              ),
+              child: const Text('预览 PlatformView (dev)'),
             ),
             const SizedBox(height: 16),
             Padding(

@@ -16,6 +16,8 @@ public class RuncamGfPlugin: NSObject, FlutterPlugin {
     private static var engineEvents: EngineEvents?
     /// 阶段1:预览 API 转发壳。强引用持有,避免被释放。
     private static var previewApi: PreviewApiImpl?
+    /// PlatformView 预览工厂。强引用持有。
+    private static var previewPVFactory: PreviewPlatformViewFactory?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
@@ -39,6 +41,14 @@ public class RuncamGfPlugin: NSObject, FlutterPlugin {
         )
         PreviewApiSetup.setUp(binaryMessenger: registrar.messenger(), api: preview)
         previewApi = preview
+
+        // PlatformView 预览(对照 Texture):嵌原生 MTKView 直出,共享同一 engine stabilizer。
+        let pvFactory = PreviewPlatformViewFactory(
+            messenger: registrar.messenger(),
+            stabilizer: { [weak engine] in engine?.stabilizerHandle }
+        )
+        registrar.register(pvFactory, withId: "runcam_gf/preview_platformview")
+        previewPVFactory = pvFactory
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
