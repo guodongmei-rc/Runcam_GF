@@ -32,6 +32,7 @@ static const void *PPVCurrentRenderTarget(const void *opaque);
   int _fovProbeN;                          // 复用 Texture 那套打点风格,便于对照
   dispatch_queue_t _renderQueue;           // 专用渲染串行队列:手动驱动 [mtkView draw],不占主线程(对齐原生)
   BOOL _loopRunning;                        // 渲染循环是否在跑
+  BOOL _hasRenderedAnyFrame;               // 是否产出过至少一帧(对齐 ViewController.mm:首帧黑屏兜底)
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -73,11 +74,12 @@ static const void *PPVCurrentRenderTarget(const void *opaque);
       if (!s) { result(nil); return; }
       if ([call.method isEqualToString:@"play"]) { [s play]; result(nil); }
       else if ([call.method isEqualToString:@"pause"]) { [s pause]; result(nil); }
+      else if ([call.method isEqualToString:@"renderOnce"]) { [s renderOnce]; result(nil); }
       else if ([call.method isEqualToString:@"dispose"]) { [s teardown]; result(nil); }
       else { result(FlutterMethodNotImplemented); }
     }];
 
-    [self play]; // 进页自动播放
+    [self renderOnce]; // 进页渲首帧并停住,等 Dart 经通道调 play 才播放
   }
   return self;
 }
@@ -129,13 +131,19 @@ static const void *PPVCurrentRenderTarget(const void *opaque);
   _player->setMedia(path.c_str());
   _player->setVideoSurfaceSize(_inW, _inH);
   _player->prepare(0);
-  _player->set(mdk::State::Playing);
+  _player->set(mdk::State::Paused); // 进页不自动播,停在首帧;renderOnce 渲一帧,play 才连续播
 }
 
 #pragma mark - 播放控制
 
 - (void)play {
-  if (_player) { _player->set(mdk::State::Playing); }
+  if (_player) {
+    // 到尾则先 Stopped 复位再 Playing,从 0 重播(对齐原生,避免停在末帧不动)。
+    int64_t dur = _player->mediaInfo().duration;
+    int64_t pos = _player->position();
+    if (dur > 0 && pos >= dur - 50) { _player->set(mdk::State::Stopped); }
+    _player->set(mdk::State::Playing);
+  }
   _playing = YES;
   if (_loopRunning) { return; }
   _loopRunning = YES;
@@ -146,6 +154,44 @@ static const void *PPVCurrentRenderTarget(const void *opaque);
   _playing = NO;
   _loopRunning = NO; // 循环下一拍自停
   if (_player) { _player->set(mdk::State::Paused); }
+}
+
+// 暂停态按需重渲一帧:drawInMTKView 在 !_playing 时早退,故临时置 _playing 让其渲一帧
+// (MDK 已 Paused,renderVideo 停在当前帧),用新防抖变换重处理当前帧。循环未跑才执行。
+- (void)renderOnce {
+  dispatch_async(_renderQueue, ^{
+    if (self->_loopRunning) { return; }
+    if (self->_hasRenderedAnyFrame) {
+      // 已出过帧:暂停态参数 recompute 后单次重渲。
+      BOOL was = self->_playing;
+      self->_playing = YES;
+      [self->_mtkView draw];
+      self->_playing = was;
+    } else {
+      // 首帧尚未渲出:走兜底,处理 prepare 异步未解完的黑屏竞态。
+      [self primeFirstFrame:0 seeked:NO];
+    }
+  });
+}
+
+// 首帧黑屏兜底 —— 对齐 ViewController.mm prepare 回调:prepare(0) 异步,首帧常未解出,
+// renderVideo() 返回 -1 → drawInMTKView 早退 → 单次 [draw] 渲不出 → 黑屏。在渲染队列上轮询
+// [draw] 直到产出首帧;短暂等待仍无帧则 seek(0) 逼 MDK 解首帧(对齐原生高码率文件兜底)。
+// _player 为空(teardown 后)或已出帧即停;上限 ~2s。
+- (void)primeFirstFrame:(int)attempt seeked:(BOOL)seeked {
+  if (!_player || _loopRunning || _hasRenderedAnyFrame || attempt > 120) { return; }
+  BOOL was = _playing;
+  _playing = YES;
+  [_mtkView draw]; // 同步:drawInMTKView 在 _renderQueue 执行,成功 present 后置 _hasRenderedAnyFrame
+  _playing = was;
+  if (_hasRenderedAnyFrame) { return; }
+  if (!seeked && attempt >= 6 && _player) {
+    _player->seek(0); // 逼 MDK 解首帧
+    seeked = YES;
+  }
+  __weak typeof(self) ws = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.016 * NSEC_PER_SEC)),
+                 _renderQueue, ^{ [ws primeFirstFrame:attempt + 1 seeked:seeked]; });
 }
 
 // 在 _renderQueue 上手动驱动 MTKView 渲染:[draw] 同步触发 drawInMTKView(也在本队列执行),
@@ -200,6 +246,7 @@ static const void *PPVCurrentRenderTarget(const void *opaque);
   id<MTLCommandBuffer> cb = [_queue commandBuffer];
   [cb presentDrawable:drawable];
   [cb commit];
+  _hasRenderedAnyFrame = YES; // 已真正出一帧:首帧兜底循环可停
 }
 
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {

@@ -21,7 +21,7 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
 
   String? _uri;
   String _status = '点「选视频」开始';
-  bool _playing = true;
+  bool _playing = false; // 打开后停在首帧,手动点播放(对齐原生 + PreviewPlatformView init 渲首帧暂停)
   MethodChannel? _pv; // 每个 PlatformView 实例的控制通道
 
   Future<void> _start() async {
@@ -33,12 +33,12 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
       await _bridge.createStabilizer();
       final info = await _bridge.openVideo(uri);
       await _bridge.setStabEnabled(true);
-      await _bridge.setGyroOffset(48.0); // raw-IMU 机型按机型默认补偿(同 Texture 页)
+      // 不再强推 gyro_offset(原生不写 stabilizer);此演示页不做镜头自动匹配,仅作直出对照。
       await _model.pushAllDefaultsAndRecompute();
       if (!mounted) return;
       setState(() {
         _uri = uri;
-        _playing = true;
+        _playing = false; // 打开后停在首帧,手动点播放
         _status = '原生直出 (PlatformView) · out=${info.outputWidth}x${info.outputHeight}';
       });
     } on PlatformException catch (e) {

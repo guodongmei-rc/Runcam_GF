@@ -490,6 +490,23 @@ int32_t gyroflow_get_imu_orientation(GyroflowStabilizer *handle, char *out_buf, 
 /** 陀螺仪低通滤波（Hz）。0 表示关闭。 */
 int32_t gyroflow_set_imu_lpf(GyroflowStabilizer *handle, double hz);
 
+/* —— 运动数据高级项(符号已在 libgyroflow_core.a 内,对齐官方 ffi.rs;此前头文件未声明)——
+ * 三个 setter 内部已 recompute_gyro;调用方仍需 recompute_blocking 刷 max angles/minFov。 */
+/** 中值滤波采样数。0=关闭。 */
+int32_t gyroflow_set_imu_median_filter(GyroflowStabilizer *handle, int32_t samples);
+/** IMU 旋转(度):pitch/roll/yaw。三者全 0=不旋转。 */
+int32_t gyroflow_set_imu_rotation(GyroflowStabilizer *handle, double pitch, double roll, double yaw);
+/** 陀螺仪 bias(°/s):x/y/z。三者全 0=无偏置。 */
+int32_t gyroflow_set_imu_bias(GyroflowStabilizer *handle, double bx, double by, double bz);
+/** 读当前 IMU 低通(Hz)。0=未启用。出错返回 0.0。 */
+double  gyroflow_get_imu_lpf(GyroflowStabilizer *handle);
+/** 读当前中值滤波采样数。0=未启用。 */
+int32_t gyroflow_get_imu_median_filter(GyroflowStabilizer *handle);
+/** 读 IMU 旋转角(度):out[0]=pitch out[1]=roll out[2]=yaw。out 长度 >=3。成功 0,失败 -1。 */
+int32_t gyroflow_get_imu_rotation(GyroflowStabilizer *handle, double *out);
+/** 读陀螺仪 bias(°/s):out[0]=x out[1]=y out[2]=z。out 长度 >=3。成功 0,失败 -1。 */
+int32_t gyroflow_get_imu_bias(GyroflowStabilizer *handle, double *out);
+
 /** 积分方法。0=None, 1=Complementary, 2=VQF（桌面默认）, 3=Madgwick, 4=Mahony, 5=GyroOnly。 */
 int32_t gyroflow_set_integration_method(GyroflowStabilizer *handle, uint32_t index);
 

@@ -34,8 +34,8 @@ void main() {
     ));
     expect(find.byKey(const Key('stab_smoothness_pitch')), findsNothing);
     expect(find.byKey(const Key('stab_smoothness')), findsOneWidget);
-    // 展开高级选项 → 勾「按轴」。
-    await tester.tap(find.text('高级选项'));
+    // 展开高级选项(第一个=平滑高级)→ 勾「按轴」。
+    await tester.tap(find.text('高级选项').first);
     await tester.pump();
     await tester.tap(find.byKey(const Key('stab_per_axis')));
     await tester.pump();

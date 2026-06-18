@@ -37,7 +37,8 @@ public class RuncamGfPlugin: NSObject, FlutterPlugin {
         // 阶段1:注册预览 API(共享 engine 的 stabilizer 句柄 + 插件纹理注册表)。
         let preview = PreviewApiImpl(
             textures: registrar.textures(),
-            stabilizer: { [weak engine] in engine?.stabilizerHandle }
+            stabilizer: { [weak engine] in engine?.stabilizerHandle },
+            events: events
         )
         PreviewApiSetup.setUp(binaryMessenger: registrar.messenger(), api: preview)
         previewApi = preview

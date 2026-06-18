@@ -33,7 +33,7 @@ Pod::Spec.new do |s|
   # + Gyroflow Obj-C/Obj-C++ 源码 + FFI 头。
   s.source_files     = 'Classes/**/*.{swift,h,mm}', 'Sources/**/*.{h,m,mm}', 'Libs/gyroflow_ffi.h'
   # PreviewController.h 进 public(umbrella)header,Swift 才能 import 到 PreviewController。
-  s.public_header_files = 'Libs/gyroflow_ffi.h', 'Sources/GyroflowLauncher.h', 'Classes/PreviewController.h', 'Classes/PreviewPlatformView.h'
+  s.public_header_files = 'Libs/gyroflow_ffi.h', 'Sources/GyroflowLauncher.h', 'Sources/AutosyncRunner.h', 'Classes/PreviewController.h', 'Classes/PreviewPlatformView.h', 'Classes/GFExporter.h', 'Sources/GFExportUtils.h'
   s.preserve_paths   = 'Libs/*.a', 'MDK/include/**/*'
 
   s.vendored_libraries = [

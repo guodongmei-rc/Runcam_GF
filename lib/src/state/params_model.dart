@@ -179,13 +179,25 @@ class ParamsModel extends ChangeNotifier {
     });
   }
 
-  /// 复位共享防抖定时器;到点跑一次 recomputeBlocking 并回填。
+  // 导出期间为 true:禁止防抖 recompute(导出在另一线程独占 stabilizer,并发 recompute 会崩)。
+  bool exportInProgress = false;
+  Future<void>? _inFlightRecompute; // 当前在飞的 recompute,flush 时等它跑完
+
+  /// 复位共享防抖定时器;到点跑一次 recomputeBlocking 并回填。导出期间不再 arm。
   void armRecompute() {
+    if (exportInProgress) return;
     _recomputeTimer?.cancel();
     _recomputeTimer = Timer(debounce, _runRecompute);
   }
 
   Future<void> _runRecompute() async {
+    final fut = _doRecompute();
+    _inFlightRecompute = fut;
+    await fut;
+    if (identical(_inFlightRecompute, fut)) _inFlightRecompute = null;
+  }
+
+  Future<void> _doRecompute() async {
     try {
       final info = await bridge.recomputeBlocking();
       if (_disposed) return;
@@ -197,6 +209,17 @@ class ParamsModel extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ParamsModel] recompute failed: $e'); // 保留旧只读值
     }
+  }
+
+  /// 导出前调用:取消挂起的防抖定时器并跑完它,再等任何在飞的 recompute 结束。
+  /// 返回后引擎 recompute 已空闲,导出独占 stabilizer 不会并发。
+  Future<void> flushPendingRecompute() async {
+    if (_recomputeTimer?.isActive ?? false) {
+      _recomputeTimer!.cancel();
+      await _runRecompute();
+    }
+    final f = _inFlightRecompute;
+    if (f != null) await f;
   }
 
   /// 对齐 .m loadDefaultsFromStabilizer:把所有接 FFI 的当前值推到引擎,

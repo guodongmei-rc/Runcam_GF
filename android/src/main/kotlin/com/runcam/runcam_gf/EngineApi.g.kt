@@ -61,7 +61,12 @@ data class VideoInfo (
   val outputHeight: Long? = null,
   val fps: Double? = null,
   val durationS: Double? = null,
-  val frameCount: Long? = null
+  val frameCount: Long? = null,
+  val videoCodec: String? = null,
+  val pixelFormat: String? = null,
+  val audioCodec: String? = null,
+  val audioSampleRate: Long? = null,
+  val rotationDeg: Long? = null
 )
  {
   companion object {
@@ -73,7 +78,12 @@ data class VideoInfo (
       val fps = pigeonVar_list[4] as Double?
       val durationS = pigeonVar_list[5] as Double?
       val frameCount = pigeonVar_list[6] as Long?
-      return VideoInfo(width, height, outputWidth, outputHeight, fps, durationS, frameCount)
+      val videoCodec = pigeonVar_list[7] as String?
+      val pixelFormat = pigeonVar_list[8] as String?
+      val audioCodec = pigeonVar_list[9] as String?
+      val audioSampleRate = pigeonVar_list[10] as Long?
+      val rotationDeg = pigeonVar_list[11] as Long?
+      return VideoInfo(width, height, outputWidth, outputHeight, fps, durationS, frameCount, videoCodec, pixelFormat, audioCodec, audioSampleRate, rotationDeg)
     }
   }
   fun toList(): List<Any?> {
@@ -85,6 +95,11 @@ data class VideoInfo (
       fps,
       durationS,
       frameCount,
+      videoCodec,
+      pixelFormat,
+      audioCodec,
+      audioSampleRate,
+      rotationDeg,
     )
   }
 }
@@ -147,6 +162,49 @@ data class PreviewInfo (
     )
   }
 }
+
+/**
+ * 导出请求(对齐旧原生 runExportFromURL 入参):源视频 + 输出位置 + 编码参数 + 输出尺寸。
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class ExportRequest (
+  val srcUri: String? = null,
+  val outputUri: String? = null,
+  val fileName: String? = null,
+  val codecIndex: Long? = null,
+  val bitrateMbps: Long? = null,
+  val exportAudio: Boolean? = null,
+  val width: Long? = null,
+  val height: Long? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): ExportRequest {
+      val srcUri = pigeonVar_list[0] as String?
+      val outputUri = pigeonVar_list[1] as String?
+      val fileName = pigeonVar_list[2] as String?
+      val codecIndex = pigeonVar_list[3] as Long?
+      val bitrateMbps = pigeonVar_list[4] as Long?
+      val exportAudio = pigeonVar_list[5] as Boolean?
+      val width = pigeonVar_list[6] as Long?
+      val height = pigeonVar_list[7] as Long?
+      return ExportRequest(srcUri, outputUri, fileName, codecIndex, bitrateMbps, exportAudio, width, height)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      srcUri,
+      outputUri,
+      fileName,
+      codecIndex,
+      bitrateMbps,
+      exportAudio,
+      width,
+      height,
+    )
+  }
+}
 private open class EngineApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -165,6 +223,11 @@ private open class EngineApiPigeonCodec : StandardMessageCodec() {
           PreviewInfo.fromList(it)
         }
       }
+      132.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ExportRequest.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -180,6 +243,10 @@ private open class EngineApiPigeonCodec : StandardMessageCodec() {
       }
       is PreviewInfo -> {
         stream.write(131)
+        writeValue(stream, value.toList())
+      }
+      is ExportRequest -> {
+        stream.write(132)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -220,12 +287,22 @@ interface EngineApi {
   fun setOutputSizeExact(width: Long, height: Long)
   fun setGyroOffset(offsetMs: Double)
   fun setImuLpf(hz: Double)
+  fun setImuMedian(samples: Long)
+  fun setImuRotation(pitchDeg: Double, rollDeg: Double, yawDeg: Double)
+  fun setImuBias(x: Double, y: Double, z: Double)
   fun setImuOrientation(orientation: String)
   fun setIntegrationMethod(index: Long)
   fun setFrameOffset(frames: Long)
   fun lensSearch(query: String): String
   fun loadLens(uriOrIdOrJson: String): String
   fun getLensInfoFull(): String
+  /**
+   * 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
+   * .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
+   * 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
+   * (安卓 nativeLoadGyro 已在加载时内部自动配镜头,该方法在安卓为 no-op。)
+   */
+  fun autoloadLensForCamera(): Long
   fun loadGyro(uriOrPath: String, loadAllMetadata: Boolean): String
   fun folderAccessGranted(folderUrl: String)
   /**
@@ -234,10 +311,19 @@ interface EngineApi {
    */
   fun recomputeBlocking(callback: (Result<StabInfo>) -> Unit)
   fun getVideoMetadata(): String
+  /**
+   * 运动数据当前状态 JSON(供「输入」面板回显):
+   * {"imu_orientation":"ZyX","has_quaternions":bool,"integration_method":int,
+   *  "lpf":double,"median":int,"rotation":[p,r,y],"bias":[x,y,z]}
+   * 安卓 nativeGetGyroInfo 全字段;iOS 用 get_imu_orientation + has_quaternions 拼核心字段。
+   */
+  fun getGyroInfo(): String
   fun gyroTimeline(count: Long): List<Double>
   fun quaternionTimeline(count: Long): List<Double>
   fun quatsAtTimestamp(timestampUs: Long): List<Double>
   fun getFovAtTimestamp(timestampUs: Long): Double
+  fun autosyncStart(uriOrPath: String, initialOffsetMs: Double, searchSizeSec: Double, maxSyncPoints: Long, everyNthFrame: Long, timePerSyncpointSec: Double, ofMethod: Long, poseMethod: Long, offsetMethod: Long, calcInitialFast: Boolean, checkNegativeInitialOffset: Boolean, autoSyncPoints: Boolean)
+  fun autosyncCancel()
 
   companion object {
     /** The codec used by EngineApi. */
@@ -735,6 +821,64 @@ interface EngineApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.setImuMedian$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val samplesArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              api.setImuMedian(samplesArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.setImuRotation$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pitchDegArg = args[0] as Double
+            val rollDegArg = args[1] as Double
+            val yawDegArg = args[2] as Double
+            val wrapped: List<Any?> = try {
+              api.setImuRotation(pitchDegArg, rollDegArg, yawDegArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.setImuBias$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val xArg = args[0] as Double
+            val yArg = args[1] as Double
+            val zArg = args[2] as Double
+            val wrapped: List<Any?> = try {
+              api.setImuBias(xArg, yArg, zArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.setImuOrientation$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -838,6 +982,21 @@ interface EngineApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.autoloadLensForCamera$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.autoloadLensForCamera())
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.loadGyro$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -907,6 +1066,21 @@ interface EngineApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.getGyroInfo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getGyroInfo())
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.gyroTimeline$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -965,6 +1139,51 @@ interface EngineApi {
             val timestampUsArg = args[0] as Long
             val wrapped: List<Any?> = try {
               listOf(api.getFovAtTimestamp(timestampUsArg))
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.autosyncStart$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uriOrPathArg = args[0] as String
+            val initialOffsetMsArg = args[1] as Double
+            val searchSizeSecArg = args[2] as Double
+            val maxSyncPointsArg = args[3] as Long
+            val everyNthFrameArg = args[4] as Long
+            val timePerSyncpointSecArg = args[5] as Double
+            val ofMethodArg = args[6] as Long
+            val poseMethodArg = args[7] as Long
+            val offsetMethodArg = args[8] as Long
+            val calcInitialFastArg = args[9] as Boolean
+            val checkNegativeInitialOffsetArg = args[10] as Boolean
+            val autoSyncPointsArg = args[11] as Boolean
+            val wrapped: List<Any?> = try {
+              api.autosyncStart(uriOrPathArg, initialOffsetMsArg, searchSizeSecArg, maxSyncPointsArg, everyNthFrameArg, timePerSyncpointSecArg, ofMethodArg, poseMethodArg, offsetMethodArg, calcInitialFastArg, checkNegativeInitialOffsetArg, autoSyncPointsArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.autosyncCancel$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.autosyncCancel()
+              listOf(null)
             } catch (exception: Throwable) {
               wrapError(exception)
             }
@@ -1091,6 +1310,11 @@ interface PreviewApi {
   fun pause()
   fun seekTo(timestampUs: Long)
   /**
+   * 暂停态按需重渲当前帧:参数改动后 recompute 完,主动刷新一次预览
+   * (播放时渲染循环已连续刷新,无需调用)。
+   */
+  fun renderOnce()
+  /**
    * 取并清零"自上次调用以来 copyPixelBuffer 被调次数"= Flutter 实际合成/上屏该
    * 纹理的帧数。每秒调一次即得真实合成 FPS(Dart 的 addTimingsCallback 只统计框架帧、
    * 看不到外部纹理合成,故须在原生侧计数)。
@@ -1098,6 +1322,14 @@ interface PreviewApi {
   fun takeCompositedFrameCount(): Long
   /** 导出模式:开启后逐帧只渲输出供回读、不上屏(对齐 nativeSetExportMode)。 */
   fun setExportMode(on: Boolean)
+  /**
+   * 开始导出(对齐旧原生 runExportFromURL):复用共享 stabilizer 逐帧
+   * 解码→process_frame→编码写文件,进度经 EngineEvents.onExportProgress 回报。
+   * 返回空串=成功;非空=错误信息(取消时返回「已取消」)。
+   */
+  fun startExport(req: ExportRequest, callback: (Result<String>) -> Unit)
+  /** 取消进行中的导出(置标志,导出循环下一帧自停)。 */
+  fun cancelExport()
 
   companion object {
     /** The codec used by PreviewApi. */
@@ -1194,6 +1426,22 @@ interface PreviewApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.PreviewApi.renderOnce$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.renderOnce()
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.PreviewApi.takeCompositedFrameCount$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
@@ -1216,6 +1464,42 @@ interface PreviewApi {
             val onArg = args[0] as Boolean
             val wrapped: List<Any?> = try {
               api.setExportMode(onArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.PreviewApi.startExport$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val reqArg = args[0] as ExportRequest
+            api.startExport(reqArg) { result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.PreviewApi.cancelExport$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelExport()
               listOf(null)
             } catch (exception: Throwable) {
               wrapError(exception)

@@ -1,9 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'gyroflow_theme.dart';
 
-/// 原生同款滑杆行:标签(灰)+ 橙色滑条 + 数值单位。
+/// 数字输入格式化器:逐字符校验,非法内容直接拒绝(保留旧值)。
+/// [decimal] 允许一个小数点;[negative] 允许前导负号。
+class NumInputFormatter extends TextInputFormatter {
+  const NumInputFormatter({this.decimal = true, this.negative = false});
+  final bool decimal;
+  final bool negative;
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final t = newValue.text;
+    if (t.isEmpty) return newValue; // 允许清空
+    final sign = negative ? '-?' : '';
+    final dot = decimal ? r'\.?' : '';
+    final pattern = RegExp('^$sign\\d*$dot\\d*\$');
+    return pattern.hasMatch(t) ? newValue : oldValue; // 不合规 → 不允许输入
+  }
+}
+
+/// 便捷:按类型取格式化器列表。
+List<TextInputFormatter> numFormatters(
+        {bool decimal = true, bool negative = false}) =>
+    [NumInputFormatter(decimal: decimal, negative: negative)];
+
+/// 原生同款滑杆行:标签(灰)+ 橙色滑条 + **可编辑数值输入框**(+ 单位)。
 /// 数值以**显示单位**给(如平滑度 0–100%),调用方自行换算到模型单位。
-class GyroSlider extends StatelessWidget {
+class GyroSlider extends StatefulWidget {
   const GyroSlider({
     super.key,
     required this.label,
@@ -13,6 +38,8 @@ class GyroSlider extends StatelessWidget {
     required this.onChanged,
     this.unit = '',
     this.precision = 1,
+    this.trailing,
+    this.onTitleDoubleTap,
   });
 
   final String label;
@@ -20,6 +47,50 @@ class GyroSlider extends StatelessWidget {
   final double value, min, max;
   final int precision;
   final ValueChanged<double> onChanged;
+  final Widget? trailing; // 行尾内联控件(如帧读出方向按钮 / 视频速度链接框)
+  final VoidCallback? onTitleDoubleTap; // 双击标题:恢复到加载时的值
+
+  @override
+  State<GyroSlider> createState() => _GyroSliderState();
+}
+
+class _GyroSliderState extends State<GyroSlider> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: _fmt(widget.value));
+  final FocusNode _focus = FocusNode();
+
+  String _fmt(double v) => v.toStringAsFixed(widget.precision);
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _commit(); // 失焦即提交
+    });
+  }
+
+  @override
+  void didUpdateWidget(GyroSlider old) {
+    super.didUpdateWidget(old);
+    // 滑条拖动/外部改值 → 回填输入框(编辑中不打断)。
+    if (!_focus.hasFocus && widget.value != old.value) {
+      _ctrl.text = _fmt(widget.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _commit() {
+    final raw = double.tryParse(_ctrl.text.trim());
+    final v = (raw ?? widget.value).clamp(widget.min, widget.max).toDouble();
+    widget.onChanged(v);
+    _ctrl.text = _fmt(v); // 回填 clamp 后值
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,22 +99,73 @@ class GyroSlider extends StatelessWidget {
       child: Row(children: [
         SizedBox(
           width: 104,
-          child: Text(label,
-              style: const TextStyle(color: GfColors.textSecondary, fontSize: 13)),
+          child: GestureDetector(
+            onDoubleTap: widget.onTitleDoubleTap, // 双击恢复加载值
+            behavior: HitTestBehavior.opaque,
+            child: Text(widget.label,
+                style: const TextStyle(
+                    color: GfColors.textSecondary, fontSize: 13)),
+          ),
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            onChanged: onChanged,
+            value: widget.value.clamp(widget.min, widget.max),
+            min: widget.min,
+            max: widget.max,
+            onChanged: widget.onChanged,
           ),
         ),
-        SizedBox(
-          width: 62,
-          child: Text('${value.toStringAsFixed(precision)}$unit',
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: GfColors.text, fontSize: 13)),
+        // 右侧:trailing(如读出方向/链接框)在上,数值输入框在下(对齐官方布局)。
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (widget.trailing != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: widget.trailing!,
+              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 数值输入框:填充圆角样式(同「粗略大致偏移」),占位同原数值文字宽。
+                SizedBox(
+                  width: 58,
+                  child: TextField(
+                    controller: _ctrl,
+                    focusNode: _focus,
+                    keyboardType: TextInputType.numberWithOptions(
+                        decimal: widget.precision > 0, signed: widget.min < 0),
+                    inputFormatters: numFormatters(
+                        decimal: widget.precision > 0,
+                        negative: widget.min < 0),
+                    textAlign: TextAlign.end,
+                    textInputAction: TextInputAction.done,
+                    style: const TextStyle(color: GfColors.text, fontSize: 13),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: true,
+                      fillColor: GfColors.inputBg,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide.none),
+                    ),
+                    onSubmitted: (_) => _focus.unfocus(),
+                    onTapOutside: (_) => _focus.unfocus(),
+                  ),
+                ),
+                if (widget.unit.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Text(widget.unit,
+                        style: const TextStyle(
+                            color: GfColors.textSecondary, fontSize: 12)),
+                  ),
+              ],
+            ),
+          ],
         ),
       ]),
     );
@@ -101,23 +223,31 @@ class GyroDropdown extends StatelessWidget {
     required this.options,
     required this.value,
     required this.onChanged,
+    this.onTitleDoubleTap,
   });
 
   final String label;
   final List<String> options;
   final int value;
   final ValueChanged<int> onChanged;
+  final VoidCallback? onTitleDoubleTap; // 双击标题:恢复到加载时的值
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(children: [
-        SizedBox(
-          width: 104,
-          child: Text(label,
-              style: const TextStyle(color: GfColors.textSecondary, fontSize: 13)),
-        ),
+        if (label.isNotEmpty)
+          SizedBox(
+            width: 104,
+            child: GestureDetector(
+              onDoubleTap: onTitleDoubleTap, // 双击恢复加载值
+              behavior: HitTestBehavior.opaque,
+              child: Text(label,
+                  style: const TextStyle(
+                      color: GfColors.textSecondary, fontSize: 13)),
+            ),
+          ),
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -243,13 +373,18 @@ class GyroAdvToggle extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(children: [
-          Icon(expanded ? Icons.expand_less : Icons.expand_more,
-              color: GfColors.textMuted, size: 18),
-          const SizedBox(width: 4),
-          Text(label,
-              style: const TextStyle(color: GfColors.textMuted, fontSize: 13)),
-        ]),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // 居中
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: GfColors.accent, // 主题色
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                color: GfColors.accent, size: 18),
+          ],
+        ),
       ),
     );
   }

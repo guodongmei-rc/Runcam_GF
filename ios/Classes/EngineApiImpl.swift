@@ -1,5 +1,7 @@
 import Foundation
 import Flutter
+import AVFoundation
+import AudioToolbox
 
 /// S3 — iOS 引擎转发壳(阶段2)。
 ///
@@ -18,11 +20,20 @@ final class EngineApiImpl: EngineApi {
 
     private var handle: OpaquePointer?
 
+    /// 镜头库搜索专用 stabilizer(裸句柄、无视频/镜头状态),避免搜索结果被当前
+    /// 视频/镜头过滤(对齐 ViewController.mm:146 lensSearchStab)。懒创建,freeStabilizer 释放。
+    private var lensSearchStab: OpaquePointer?
+
     /// 供 PreviewController 共享同一引擎句柄(阶段1 预览)。
     var stabilizerHandle: OpaquePointer? { handle }
 
     private let events: EngineEvents?
     private let recomputeQueue = DispatchQueue(label: "gyroflow.engine.recompute")
+
+    /// 最近一次成功 openVideo 的源(供 autosync 复用,转 URL 喂 AutosyncRunner)。
+    private var videoUri: String?
+    /// 自动同步运行器(强引用,运行期间存活)。
+    private var autosyncRunner: AutosyncRunner?
 
     init(events: EngineEvents?) {
         self.events = events
@@ -44,6 +55,62 @@ final class EngineApiImpl: EngineApi {
             gyroflow_stabilizer_free(h)
         }
         handle = nil
+        if let s = lensSearchStab {
+            gyroflow_stabilizer_free(s)
+            lensSearchStab = nil
+        }
+    }
+
+    // MARK: - 自动同步(autosync)
+
+    func autosyncStart(uriOrPath: String, initialOffsetMs: Double, searchSizeSec: Double,
+                       maxSyncPoints: Int64, everyNthFrame: Int64, timePerSyncpointSec: Double,
+                       ofMethod: Int64, poseMethod: Int64, offsetMethod: Int64,
+                       calcInitialFast: Bool, checkNegativeInitialOffset: Bool,
+                       autoSyncPoints: Bool) throws {
+        let path = videoUri ?? uriOrPath
+        guard let h = handle, !path.isEmpty, let url = resolveURL(path) else {
+            events?.onAutosyncFinished(medianOffsetMs: 0, syncPoints: [], ok: false) { _ in }
+            return
+        }
+
+        let runner = AutosyncRunner(videoURL: url, stabilizer: h)
+        runner.initialOffsetMs = initialOffsetMs
+        runner.searchSizeSec = searchSizeSec
+        runner.maxSyncPoints = UInt32(truncatingIfNeeded: maxSyncPoints)
+        runner.everyNthFrame = UInt32(truncatingIfNeeded: everyNthFrame)
+        runner.timePerSyncpointSec = timePerSyncpointSec
+        runner.ofMethod = UInt32(truncatingIfNeeded: ofMethod)
+        runner.poseMethod = UInt32(truncatingIfNeeded: poseMethod)
+        runner.offsetMethod = UInt32(truncatingIfNeeded: offsetMethod)
+        runner.calcInitialFast = calcInitialFast
+        runner.checkNegativeInitialOffset = checkNegativeInitialOffset
+        runner.autoSyncPointsExperimental = autoSyncPoints
+
+        // 回调全部在主线程(AutosyncRunner 保证),直接转发到 EngineEvents。
+        runner.onProgress = { [weak self] p, fed, total in
+            self?.events?.onAutosyncProgress(progress: p, ready: Int64(fed), total: Int64(total)) { _ in }
+        }
+        runner.onFinished = { [weak self] offsetMs, points in
+            // points: [{midpointMs, offsetMs}] → 摊平成交错 [mid, off, ...]。
+            var flat: [Double] = []
+            flat.reserveCapacity(points.count * 2)
+            for d in points {
+                flat.append(d["midpointMs"]?.doubleValue ?? 0)
+                flat.append(d["offsetMs"]?.doubleValue ?? 0)
+            }
+            self?.events?.onAutosyncFinished(medianOffsetMs: offsetMs, syncPoints: flat, ok: true) { _ in }
+        }
+        runner.onFailed = { [weak self] _ in
+            self?.events?.onAutosyncFinished(medianOffsetMs: 0, syncPoints: [], ok: false) { _ in }
+        }
+
+        autosyncRunner = runner
+        runner.start()
+    }
+
+    func autosyncCancel() throws {
+        autosyncRunner?.cancel()
     }
 
     func openVideo(uriOrPath: String, completion: @escaping (Result<VideoInfo, Error>) -> Void) {
@@ -54,11 +121,16 @@ final class EngineApiImpl: EngineApi {
         recomputeQueue.async {
             var info = GyroflowVideoInfo()
             let r = gyroflow_load_video_file(h, uriOrPath, &info)
-            DispatchQueue.main.async {
-                if r != 0 {
+            if r != 0 {
+                DispatchQueue.main.async {
                     completion(.failure(self.lastError("LOAD_VIDEO_FAILED")))
-                    return
                 }
+                return
+            }
+            // 用 AVAsset 补充编解码/采样率/旋转(失败则相应字段留 nil,不让 openVideo 失败)。
+            let av = self.extractAVInfo(uriOrPath)
+            DispatchQueue.main.async {
+                self.videoUri = uriOrPath
                 completion(.success(VideoInfo(
                     width: Int64(info.width),
                     height: Int64(info.height),
@@ -66,10 +138,93 @@ final class EngineApiImpl: EngineApi {
                     outputHeight: Int64(info.output_height),
                     fps: info.fps,
                     durationS: info.duration_s,
-                    frameCount: Int64(info.frame_count)
+                    frameCount: Int64(info.frame_count),
+                    videoCodec: av.videoCodec,
+                    pixelFormat: nil, // AVAsset 难可靠取像素格式 → 留 nil(Dart 显示「---」)
+                    audioCodec: av.audioCodec,
+                    audioSampleRate: av.audioSampleRate,
+                    rotationDeg: av.rotationDeg
                 )))
             }
         }
+    }
+
+    // MARK: - 音视频信息 / autosync 辅助
+
+    /// 把源(file:// URL 或纯路径)解析成 URL。含 "://" 视作 URL 字符串,否则按文件路径。
+    private func resolveURL(_ s: String) -> URL? {
+        if s.contains("://") {
+            return URL(string: s)
+        }
+        return URL(fileURLWithPath: s)
+    }
+
+    /// 同步读取 AVAsset 的视频/音频编解码、音频采样率、视频旋转角。读不到返回 nil。
+    private func extractAVInfo(_ uriOrPath: String)
+        -> (videoCodec: String?, audioCodec: String?, audioSampleRate: Int64?, rotationDeg: Int64?) {
+        guard let url = resolveURL(uriOrPath) else { return (nil, nil, nil, nil) }
+        let asset = AVURLAsset(url: url)
+
+        var videoCodec: String?
+        var rotationDeg: Int64?
+        if let vt = asset.tracks(withMediaType: .video).first {
+            if let fmts = vt.formatDescriptions as? [CMFormatDescription], let fd = fmts.first {
+                videoCodec = EngineApiImpl.videoCodecName(CMFormatDescriptionGetMediaSubType(fd))
+            }
+            // preferredTransform 推回旋转角(0/90/180/270)。
+            let t = vt.preferredTransform
+            let angle = atan2(t.b, t.a) * 180.0 / .pi
+            var deg = Int(angle.rounded())
+            deg = ((deg % 360) + 360) % 360
+            rotationDeg = Int64(deg)
+        }
+
+        var audioCodec: String?
+        var audioSampleRate: Int64?
+        if let at = asset.tracks(withMediaType: .audio).first,
+           let fmts = at.formatDescriptions as? [CMFormatDescription], let fd = fmts.first,
+           let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(fd) {
+            let asbd = asbdPtr.pointee
+            audioCodec = EngineApiImpl.audioCodecName(asbd.mFormatID)
+            if asbd.mSampleRate > 0 { audioSampleRate = Int64(asbd.mSampleRate) }
+        }
+
+        return (videoCodec, audioCodec, audioSampleRate, rotationDeg)
+    }
+
+    private static func videoCodecName(_ subType: FourCharCode) -> String {
+        switch subType {
+        case kCMVideoCodecType_H264: return "H.264"
+        case kCMVideoCodecType_HEVC: return "HEVC"
+        default:
+            let s = fourCCString(subType)
+            return s == "hev1" ? "HEVC" : s
+        }
+    }
+
+    private static func audioCodecName(_ formatID: AudioFormatID) -> String {
+        switch formatID {
+        case kAudioFormatMPEG4AAC: return "AAC"
+        case kAudioFormatLinearPCM: return "PCM"
+        case kAudioFormatMPEGLayer3: return "MP3"
+        case kAudioFormatAC3: return "AC-3"
+        case kAudioFormatAppleLossless: return "ALAC"
+        default: return fourCCString(formatID)
+        }
+    }
+
+    /// FourCC(UInt32)转可读 4 字符串,非可见字符以空格替换并裁掉。
+    private static func fourCCString(_ code: FourCharCode) -> String {
+        let bytes: [UInt8] = [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF),
+        ]
+        let chars = bytes.map { b -> Character in
+            (b >= 0x20 && b < 0x7F) ? Character(UnicodeScalar(b)) : " "
+        }
+        return String(chars).trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - 稳定
@@ -211,6 +366,21 @@ final class EngineApiImpl: EngineApi {
         _ = gyroflow_set_imu_lpf(h, hz)
     }
 
+    func setImuMedian(samples: Int64) throws {
+        guard let h = handle else { return }
+        _ = gyroflow_set_imu_median_filter(h, Int32(truncatingIfNeeded: samples))
+    }
+
+    func setImuRotation(pitchDeg: Double, rollDeg: Double, yawDeg: Double) throws {
+        guard let h = handle else { return }
+        _ = gyroflow_set_imu_rotation(h, pitchDeg, rollDeg, yawDeg)
+    }
+
+    func setImuBias(x: Double, y: Double, z: Double) throws {
+        guard let h = handle else { return }
+        _ = gyroflow_set_imu_bias(h, x, y, z)
+    }
+
     func setImuOrientation(orientation: String) throws {
         guard let h = handle else { return }
         _ = gyroflow_set_imu_orientation(h, orientation)
@@ -229,9 +399,12 @@ final class EngineApiImpl: EngineApi {
     // MARK: - 镜头
 
     func lensSearch(query: String) throws -> String {
-        guard let h = handle else { return "[]" }
-        var buf = [CChar](repeating: 0, count: 8192)
-        let n = gyroflow_lens_search(h, query, &buf, buf.count)
+        // 用专用搜索 stabilizer(裸句柄、无视频/镜头状态),否则 Rust 侧 lens_search 会按
+        // 当前已加载的镜头/视频过滤,搜不到结果(对齐 ViewController.mm:1191-1205)。
+        if lensSearchStab == nil { lensSearchStab = gyroflow_stabilizer_new() }
+        guard let s = lensSearchStab else { return "[]" }
+        var buf = [CChar](repeating: 0, count: 65536) // 结果可能很多,缓冲放大(对齐原生)
+        let n = gyroflow_lens_search(s, query, &buf, buf.count)
         return n < 0 ? "[]" : String(cString: buf)
     }
 
@@ -241,6 +414,14 @@ final class EngineApiImpl: EngineApi {
         if r != 0 { return "{\"ok\":false}" }
         _ = gyroflow_apply_loaded_lens_extras(h)
         return try getLensInfoFull()
+    }
+
+    func autoloadLensForCamera() throws -> Int64 {
+        // 按相机身份从内置库自动加载镜头(对齐 ViewController.mm:914;RunCam6 等)。
+        guard let h = handle else { return -1 }
+        let rc = gyroflow_autoload_lens_for_camera(h)
+        if rc == 0 { _ = gyroflow_apply_loaded_lens_extras(h) } // 应用档案 frame_readout/gyro_lpf
+        return Int64(rc)
     }
 
     func getLensInfoFull() throws -> String {
@@ -287,6 +468,30 @@ final class EngineApiImpl: EngineApi {
         var buf = [CChar](repeating: 0, count: 8192)
         let r = gyroflow_get_video_metadata(h, &buf, buf.count)
         return r != 0 ? "{}" : String(cString: buf)
+    }
+
+    // 运动数据回显:iOS 无合并 getGyroInfo,用各单项 getter 拼(符号均在 .a 内)。
+    // integration_method 无 getter → 不输出,面板按 has_quaternions 定默认。
+    func getGyroInfo() throws -> String {
+        guard let h = handle else { return "{}" }
+        var buf = [CChar](repeating: 0, count: 256)
+        var orient = "XYZ"
+        if gyroflow_get_imu_orientation(h, &buf, buf.count) == 0 {
+            let s = String(cString: buf)
+            if !s.isEmpty { orient = s }
+        }
+        let hasQ = (gyroflow_has_quaternions(h) == 1)
+        let lpf = gyroflow_get_imu_lpf(h)
+        let median = gyroflow_get_imu_median_filter(h)
+        var rot = [Double](repeating: 0, count: 3)
+        _ = gyroflow_get_imu_rotation(h, &rot)
+        var bias = [Double](repeating: 0, count: 3)
+        _ = gyroflow_get_imu_bias(h, &bias)
+        // 朝向只含 xyzXYZ,无需转义;直接拼 JSON。
+        return "{\"imu_orientation\":\"\(orient)\",\"has_quaternions\":\(hasQ)," +
+               "\"lpf\":\(lpf),\"median\":\(median)," +
+               "\"rotation\":[\(rot[0]),\(rot[1]),\(rot[2])]," +
+               "\"bias\":[\(bias[0]),\(bias[1]),\(bias[2])]}"
     }
 
     func gyroTimeline(count: Int64) throws -> [Double] {

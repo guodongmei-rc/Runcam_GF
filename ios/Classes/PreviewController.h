@@ -22,7 +22,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)play;
 - (void)pause;
+/// 暂停并同步排空渲染队列(等在飞的那帧 process_frame 跑完)。导出前调用,
+/// 确保导出不与预览渲染循环并发访问同一 stabilizer(否则核心非线程安全 → 崩溃)。
+- (void)pauseAndDrain;
 - (void)seekToUs:(int64_t)timestampUs;
+
+/// 暂停态按需重渲一帧:重置「同帧去重」标记后渲当前帧一次,让参数改动即时可见。
+- (void)renderOnce;
+
+/// 预览所用的 Metal device / command queue(以 void* 暴露,头文件保持 umbrella 友好)。
+/// 导出必须复用同一套(对齐原生 self.metalDevice/self.commandQueue):核心 GPU 上下文绑在
+/// 预览的 queue 上,导出若用另建的 queue 会不匹配而崩溃。
+- (void *_Nullable)metalDevicePtr;
+- (void *_Nullable)commandQueuePtr;
 
 /// 取并清零合成帧计数(= copyPixelBuffer 被调次数),Dart 每秒调一次得真实合成 FPS。
 - (int64_t)takeCompositedFrameCount;

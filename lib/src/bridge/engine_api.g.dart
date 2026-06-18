@@ -35,6 +35,11 @@ class VideoInfo {
     this.fps,
     this.durationS,
     this.frameCount,
+    this.videoCodec,
+    this.pixelFormat,
+    this.audioCodec,
+    this.audioSampleRate,
+    this.rotationDeg,
   });
 
   int? width;
@@ -51,6 +56,16 @@ class VideoInfo {
 
   int? frameCount;
 
+  String? videoCodec;
+
+  String? pixelFormat;
+
+  String? audioCodec;
+
+  int? audioSampleRate;
+
+  int? rotationDeg;
+
   Object encode() {
     return <Object?>[
       width,
@@ -60,6 +75,11 @@ class VideoInfo {
       fps,
       durationS,
       frameCount,
+      videoCodec,
+      pixelFormat,
+      audioCodec,
+      audioSampleRate,
+      rotationDeg,
     ];
   }
 
@@ -73,6 +93,11 @@ class VideoInfo {
       fps: result[4] as double?,
       durationS: result[5] as double?,
       frameCount: result[6] as int?,
+      videoCodec: result[7] as String?,
+      pixelFormat: result[8] as String?,
+      audioCodec: result[9] as String?,
+      audioSampleRate: result[10] as int?,
+      rotationDeg: result[11] as int?,
     );
   }
 }
@@ -146,6 +171,63 @@ class PreviewInfo {
   }
 }
 
+/// 导出请求(对齐旧原生 runExportFromURL 入参):源视频 + 输出位置 + 编码参数 + 输出尺寸。
+class ExportRequest {
+  ExportRequest({
+    this.srcUri,
+    this.outputUri,
+    this.fileName,
+    this.codecIndex,
+    this.bitrateMbps,
+    this.exportAudio,
+    this.width,
+    this.height,
+  });
+
+  String? srcUri;
+
+  String? outputUri;
+
+  String? fileName;
+
+  int? codecIndex;
+
+  int? bitrateMbps;
+
+  bool? exportAudio;
+
+  int? width;
+
+  int? height;
+
+  Object encode() {
+    return <Object?>[
+      srcUri,
+      outputUri,
+      fileName,
+      codecIndex,
+      bitrateMbps,
+      exportAudio,
+      width,
+      height,
+    ];
+  }
+
+  static ExportRequest decode(Object result) {
+    result as List<Object?>;
+    return ExportRequest(
+      srcUri: result[0] as String?,
+      outputUri: result[1] as String?,
+      fileName: result[2] as String?,
+      codecIndex: result[3] as int?,
+      bitrateMbps: result[4] as int?,
+      exportAudio: result[5] as bool?,
+      width: result[6] as int?,
+      height: result[7] as int?,
+    );
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -163,6 +245,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PreviewInfo) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
+    }    else if (value is ExportRequest) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -177,6 +262,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return StabInfo.decode(readValue(buffer)!);
       case 131: 
         return PreviewInfo.decode(readValue(buffer)!);
+      case 132: 
+        return ExportRequest.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -775,6 +862,72 @@ class EngineApi {
     }
   }
 
+  Future<void> setImuMedian(int samples) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.setImuMedian$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[samples]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> setImuRotation(double pitchDeg, double rollDeg, double yawDeg) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.setImuRotation$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[pitchDeg, rollDeg, yawDeg]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> setImuBias(double x, double y, double z) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.setImuBias$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[x, y, z]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
   Future<void> setImuOrientation(String orientation) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.setImuOrientation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -922,6 +1075,37 @@ class EngineApi {
     }
   }
 
+  /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
+  /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
+  /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
+  /// (安卓 nativeLoadGyro 已在加载时内部自动配镜头,该方法在安卓为 no-op。)
+  Future<int> autoloadLensForCamera() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.autoloadLensForCamera$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as int?)!;
+    }
+  }
+
   Future<String> loadGyro(String uriOrPath, bool loadAllMetadata) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.loadGyro$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1002,6 +1186,37 @@ class EngineApi {
 
   Future<String> getVideoMetadata() async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.getVideoMetadata$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// 运动数据当前状态 JSON(供「输入」面板回显):
+  /// {"imu_orientation":"ZyX","has_quaternions":bool,"integration_method":int,
+  ///  "lpf":double,"median":int,"rotation":[p,r,y],"bias":[x,y,z]}
+  /// 安卓 nativeGetGyroInfo 全字段;iOS 用 get_imu_orientation + has_quaternions 拼核心字段。
+  Future<String> getGyroInfo() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.getGyroInfo$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1132,6 +1347,50 @@ class EngineApi {
       );
     } else {
       return (pigeonVar_replyList[0] as double?)!;
+    }
+  }
+
+  Future<void> autosyncStart(String uriOrPath, double initialOffsetMs, double searchSizeSec, int maxSyncPoints, int everyNthFrame, double timePerSyncpointSec, int ofMethod, int poseMethod, int offsetMethod, bool calcInitialFast, bool checkNegativeInitialOffset, bool autoSyncPoints) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.autosyncStart$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[uriOrPath, initialOffsetMs, searchSizeSec, maxSyncPoints, everyNthFrame, timePerSyncpointSec, ofMethod, poseMethod, offsetMethod, calcInitialFast, checkNegativeInitialOffset, autoSyncPoints]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> autosyncCancel() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.autosyncCancel$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
     }
   }
 }
@@ -1436,6 +1695,30 @@ class PreviewApi {
     }
   }
 
+  /// 暂停态按需重渲当前帧:参数改动后 recompute 完,主动刷新一次预览
+  /// (播放时渲染循环已连续刷新,无需调用)。
+  Future<void> renderOnce() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.PreviewApi.renderOnce$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
   /// 取并清零"自上次调用以来 copyPixelBuffer 被调次数"= Flutter 实际合成/上屏该
   /// 纹理的帧数。每秒调一次即得真实合成 FPS(Dart 的 addTimingsCallback 只统计框架帧、
   /// 看不到外部纹理合成,故须在原生侧计数)。
@@ -1476,6 +1759,59 @@ class PreviewApi {
     );
     final List<Object?>? pigeonVar_replyList =
         await pigeonVar_channel.send(<Object?>[on]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// 开始导出(对齐旧原生 runExportFromURL):复用共享 stabilizer 逐帧
+  /// 解码→process_frame→编码写文件,进度经 EngineEvents.onExportProgress 回报。
+  /// 返回空串=成功;非空=错误信息(取消时返回「已取消」)。
+  Future<String> startExport(ExportRequest req) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.PreviewApi.startExport$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[req]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// 取消进行中的导出(置标志,导出循环下一帧自停)。
+  Future<void> cancelExport() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.PreviewApi.cancelExport$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {

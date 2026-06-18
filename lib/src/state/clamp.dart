@@ -33,7 +33,7 @@ class ParamsRange {
   // 缩放组
   static double maxZoomPercent(double v) => clampD(v, 100.0, 300.0);
   static int maxZoomIterations(int v) => clampI(v, 1, 15);
-  static double adaptiveZoomSec(double v) => clampD(v, 0.0, 10.0);
+  static double adaptiveZoomSec(double v) => clampD(v, 0.1, 15.0); // 对齐官方 from0.1 to15
   static double lensCorrection(double v) => clampD(v, 0.0, 1.0);
   static double fov(double v) => clampD(v, 0.3, 3.0);
   static int croppingMode(int v) => clampI(v, 0, 2);

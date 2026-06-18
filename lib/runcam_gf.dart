@@ -9,7 +9,8 @@ export 'src/state/params_model.dart'
         ParamsModelZoom,
         ParamsModelAdvanced;
 // 阶段1 预览:Pigeon 生成的 PreviewApi / PreviewInfo(供预览页直接调用)。
-export 'src/bridge/engine_api.g.dart' show PreviewApi, PreviewInfo;
+export 'src/bridge/engine_api.g.dart'
+    show PreviewApi, PreviewInfo, ExportRequest;
 
 /// RuncamGF — Gyroflow 视频防抖 Flutter 插件。
 ///

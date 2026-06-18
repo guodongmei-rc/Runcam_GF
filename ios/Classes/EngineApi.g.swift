@@ -79,6 +79,11 @@ struct VideoInfo {
   var fps: Double? = nil
   var durationS: Double? = nil
   var frameCount: Int64? = nil
+  var videoCodec: String? = nil
+  var pixelFormat: String? = nil
+  var audioCodec: String? = nil
+  var audioSampleRate: Int64? = nil
+  var rotationDeg: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -90,6 +95,11 @@ struct VideoInfo {
     let fps: Double? = nilOrValue(pigeonVar_list[4])
     let durationS: Double? = nilOrValue(pigeonVar_list[5])
     let frameCount: Int64? = nilOrValue(pigeonVar_list[6])
+    let videoCodec: String? = nilOrValue(pigeonVar_list[7])
+    let pixelFormat: String? = nilOrValue(pigeonVar_list[8])
+    let audioCodec: String? = nilOrValue(pigeonVar_list[9])
+    let audioSampleRate: Int64? = nilOrValue(pigeonVar_list[10])
+    let rotationDeg: Int64? = nilOrValue(pigeonVar_list[11])
 
     return VideoInfo(
       width: width,
@@ -98,7 +108,12 @@ struct VideoInfo {
       outputHeight: outputHeight,
       fps: fps,
       durationS: durationS,
-      frameCount: frameCount
+      frameCount: frameCount,
+      videoCodec: videoCodec,
+      pixelFormat: pixelFormat,
+      audioCodec: audioCodec,
+      audioSampleRate: audioSampleRate,
+      rotationDeg: rotationDeg
     )
   }
   func toList() -> [Any?] {
@@ -110,6 +125,11 @@ struct VideoInfo {
       fps,
       durationS,
       frameCount,
+      videoCodec,
+      pixelFormat,
+      audioCodec,
+      audioSampleRate,
+      rotationDeg,
     ]
   }
 }
@@ -178,6 +198,56 @@ struct PreviewInfo {
   }
 }
 
+/// 导出请求(对齐旧原生 runExportFromURL 入参):源视频 + 输出位置 + 编码参数 + 输出尺寸。
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct ExportRequest {
+  var srcUri: String? = nil
+  var outputUri: String? = nil
+  var fileName: String? = nil
+  var codecIndex: Int64? = nil
+  var bitrateMbps: Int64? = nil
+  var exportAudio: Bool? = nil
+  var width: Int64? = nil
+  var height: Int64? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> ExportRequest? {
+    let srcUri: String? = nilOrValue(pigeonVar_list[0])
+    let outputUri: String? = nilOrValue(pigeonVar_list[1])
+    let fileName: String? = nilOrValue(pigeonVar_list[2])
+    let codecIndex: Int64? = nilOrValue(pigeonVar_list[3])
+    let bitrateMbps: Int64? = nilOrValue(pigeonVar_list[4])
+    let exportAudio: Bool? = nilOrValue(pigeonVar_list[5])
+    let width: Int64? = nilOrValue(pigeonVar_list[6])
+    let height: Int64? = nilOrValue(pigeonVar_list[7])
+
+    return ExportRequest(
+      srcUri: srcUri,
+      outputUri: outputUri,
+      fileName: fileName,
+      codecIndex: codecIndex,
+      bitrateMbps: bitrateMbps,
+      exportAudio: exportAudio,
+      width: width,
+      height: height
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      srcUri,
+      outputUri,
+      fileName,
+      codecIndex,
+      bitrateMbps,
+      exportAudio,
+      width,
+      height,
+    ]
+  }
+}
+
 private class EngineApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -187,6 +257,8 @@ private class EngineApiPigeonCodecReader: FlutterStandardReader {
       return StabInfo.fromList(self.readValue() as! [Any?])
     case 131:
       return PreviewInfo.fromList(self.readValue() as! [Any?])
+    case 132:
+      return ExportRequest.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -203,6 +275,9 @@ private class EngineApiPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? PreviewInfo {
       super.writeByte(131)
+      super.writeValue(value.toList())
+    } else if let value = value as? ExportRequest {
+      super.writeByte(132)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -255,22 +330,37 @@ protocol EngineApi {
   func setOutputSizeExact(width: Int64, height: Int64) throws
   func setGyroOffset(offsetMs: Double) throws
   func setImuLpf(hz: Double) throws
+  func setImuMedian(samples: Int64) throws
+  func setImuRotation(pitchDeg: Double, rollDeg: Double, yawDeg: Double) throws
+  func setImuBias(x: Double, y: Double, z: Double) throws
   func setImuOrientation(orientation: String) throws
   func setIntegrationMethod(index: Int64) throws
   func setFrameOffset(frames: Int64) throws
   func lensSearch(query: String) throws -> String
   func loadLens(uriOrIdOrJson: String) throws -> String
   func getLensInfoFull() throws -> String
+  /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
+  /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
+  /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
+  /// (安卓 nativeLoadGyro 已在加载时内部自动配镜头,该方法在安卓为 no-op。)
+  func autoloadLensForCamera() throws -> Int64
   func loadGyro(uriOrPath: String, loadAllMetadata: Bool) throws -> String
   func folderAccessGranted(folderUrl: String) throws
   /// 阻塞重算(放后台队列执行)+ 返回 max angles / min fov。
   /// 完成后另经 EngineEvents.onRecomputeFinished 通知一次,便于 UI 统一刷新。
   func recomputeBlocking(completion: @escaping (Result<StabInfo, Error>) -> Void)
   func getVideoMetadata() throws -> String
+  /// 运动数据当前状态 JSON(供「输入」面板回显):
+  /// {"imu_orientation":"ZyX","has_quaternions":bool,"integration_method":int,
+  ///  "lpf":double,"median":int,"rotation":[p,r,y],"bias":[x,y,z]}
+  /// 安卓 nativeGetGyroInfo 全字段;iOS 用 get_imu_orientation + has_quaternions 拼核心字段。
+  func getGyroInfo() throws -> String
   func gyroTimeline(count: Int64) throws -> [Double]
   func quaternionTimeline(count: Int64) throws -> [Double]
   func quatsAtTimestamp(timestampUs: Int64) throws -> [Double]
   func getFovAtTimestamp(timestampUs: Int64) throws -> Double
+  func autosyncStart(uriOrPath: String, initialOffsetMs: Double, searchSizeSec: Double, maxSyncPoints: Int64, everyNthFrame: Int64, timePerSyncpointSec: Double, ofMethod: Int64, poseMethod: Int64, offsetMethod: Int64, calcInitialFast: Bool, checkNegativeInitialOffset: Bool, autoSyncPoints: Bool) throws
+  func autosyncCancel() throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -689,6 +779,55 @@ class EngineApiSetup {
     } else {
       setImuLpfChannel.setMessageHandler(nil)
     }
+    let setImuMedianChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.setImuMedian\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setImuMedianChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let samplesArg = args[0] as! Int64
+        do {
+          try api.setImuMedian(samples: samplesArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setImuMedianChannel.setMessageHandler(nil)
+    }
+    let setImuRotationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.setImuRotation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setImuRotationChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let pitchDegArg = args[0] as! Double
+        let rollDegArg = args[1] as! Double
+        let yawDegArg = args[2] as! Double
+        do {
+          try api.setImuRotation(pitchDeg: pitchDegArg, rollDeg: rollDegArg, yawDeg: yawDegArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setImuRotationChannel.setMessageHandler(nil)
+    }
+    let setImuBiasChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.setImuBias\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setImuBiasChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let xArg = args[0] as! Double
+        let yArg = args[1] as! Double
+        let zArg = args[2] as! Double
+        do {
+          try api.setImuBias(x: xArg, y: yArg, z: zArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setImuBiasChannel.setMessageHandler(nil)
+    }
     let setImuOrientationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.setImuOrientation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       setImuOrientationChannel.setMessageHandler { message, reply in
@@ -777,6 +916,23 @@ class EngineApiSetup {
     } else {
       getLensInfoFullChannel.setMessageHandler(nil)
     }
+    /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
+    /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
+    /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
+    /// (安卓 nativeLoadGyro 已在加载时内部自动配镜头,该方法在安卓为 no-op。)
+    let autoloadLensForCameraChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.autoloadLensForCamera\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      autoloadLensForCameraChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.autoloadLensForCamera()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      autoloadLensForCameraChannel.setMessageHandler(nil)
+    }
     let loadGyroChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.loadGyro\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       loadGyroChannel.setMessageHandler { message, reply in
@@ -838,6 +994,23 @@ class EngineApiSetup {
     } else {
       getVideoMetadataChannel.setMessageHandler(nil)
     }
+    /// 运动数据当前状态 JSON(供「输入」面板回显):
+    /// {"imu_orientation":"ZyX","has_quaternions":bool,"integration_method":int,
+    ///  "lpf":double,"median":int,"rotation":[p,r,y],"bias":[x,y,z]}
+    /// 安卓 nativeGetGyroInfo 全字段;iOS 用 get_imu_orientation + has_quaternions 拼核心字段。
+    let getGyroInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.getGyroInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getGyroInfoChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getGyroInfo()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getGyroInfoChannel.setMessageHandler(nil)
+    }
     let gyroTimelineChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.gyroTimeline\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       gyroTimelineChannel.setMessageHandler { message, reply in
@@ -897,6 +1070,45 @@ class EngineApiSetup {
       }
     } else {
       getFovAtTimestampChannel.setMessageHandler(nil)
+    }
+    let autosyncStartChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.autosyncStart\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      autosyncStartChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uriOrPathArg = args[0] as! String
+        let initialOffsetMsArg = args[1] as! Double
+        let searchSizeSecArg = args[2] as! Double
+        let maxSyncPointsArg = args[3] as! Int64
+        let everyNthFrameArg = args[4] as! Int64
+        let timePerSyncpointSecArg = args[5] as! Double
+        let ofMethodArg = args[6] as! Int64
+        let poseMethodArg = args[7] as! Int64
+        let offsetMethodArg = args[8] as! Int64
+        let calcInitialFastArg = args[9] as! Bool
+        let checkNegativeInitialOffsetArg = args[10] as! Bool
+        let autoSyncPointsArg = args[11] as! Bool
+        do {
+          try api.autosyncStart(uriOrPath: uriOrPathArg, initialOffsetMs: initialOffsetMsArg, searchSizeSec: searchSizeSecArg, maxSyncPoints: maxSyncPointsArg, everyNthFrame: everyNthFrameArg, timePerSyncpointSec: timePerSyncpointSecArg, ofMethod: ofMethodArg, poseMethod: poseMethodArg, offsetMethod: offsetMethodArg, calcInitialFast: calcInitialFastArg, checkNegativeInitialOffset: checkNegativeInitialOffsetArg, autoSyncPoints: autoSyncPointsArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      autosyncStartChannel.setMessageHandler(nil)
+    }
+    let autosyncCancelChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.autosyncCancel\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      autosyncCancelChannel.setMessageHandler { _, reply in
+        do {
+          try api.autosyncCancel()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      autosyncCancelChannel.setMessageHandler(nil)
     }
   }
 }
@@ -1030,12 +1242,21 @@ protocol PreviewApi {
   func play() throws
   func pause() throws
   func seekTo(timestampUs: Int64) throws
+  /// 暂停态按需重渲当前帧:参数改动后 recompute 完,主动刷新一次预览
+  /// (播放时渲染循环已连续刷新,无需调用)。
+  func renderOnce() throws
   /// 取并清零"自上次调用以来 copyPixelBuffer 被调次数"= Flutter 实际合成/上屏该
   /// 纹理的帧数。每秒调一次即得真实合成 FPS(Dart 的 addTimingsCallback 只统计框架帧、
   /// 看不到外部纹理合成,故须在原生侧计数)。
   func takeCompositedFrameCount() throws -> Int64
   /// 导出模式:开启后逐帧只渲输出供回读、不上屏(对齐 nativeSetExportMode)。
   func setExportMode(on: Bool) throws
+  /// 开始导出(对齐旧原生 runExportFromURL):复用共享 stabilizer 逐帧
+  /// 解码→process_frame→编码写文件,进度经 EngineEvents.onExportProgress 回报。
+  /// 返回空串=成功;非空=错误信息(取消时返回「已取消」)。
+  func startExport(req: ExportRequest, completion: @escaping (Result<String, Error>) -> Void)
+  /// 取消进行中的导出(置标志,导出循环下一帧自停)。
+  func cancelExport() throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1117,6 +1338,21 @@ class PreviewApiSetup {
     } else {
       seekToChannel.setMessageHandler(nil)
     }
+    /// 暂停态按需重渲当前帧:参数改动后 recompute 完,主动刷新一次预览
+    /// (播放时渲染循环已连续刷新,无需调用)。
+    let renderOnceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.PreviewApi.renderOnce\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      renderOnceChannel.setMessageHandler { _, reply in
+        do {
+          try api.renderOnce()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      renderOnceChannel.setMessageHandler(nil)
+    }
     /// 取并清零"自上次调用以来 copyPixelBuffer 被调次数"= Flutter 实际合成/上屏该
     /// 纹理的帧数。每秒调一次即得真实合成 FPS(Dart 的 addTimingsCallback 只统计框架帧、
     /// 看不到外部纹理合成,故须在原生侧计数)。
@@ -1148,6 +1384,40 @@ class PreviewApiSetup {
       }
     } else {
       setExportModeChannel.setMessageHandler(nil)
+    }
+    /// 开始导出(对齐旧原生 runExportFromURL):复用共享 stabilizer 逐帧
+    /// 解码→process_frame→编码写文件,进度经 EngineEvents.onExportProgress 回报。
+    /// 返回空串=成功;非空=错误信息(取消时返回「已取消」)。
+    let startExportChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.PreviewApi.startExport\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      startExportChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let reqArg = args[0] as! ExportRequest
+        api.startExport(req: reqArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      startExportChannel.setMessageHandler(nil)
+    }
+    /// 取消进行中的导出(置标志,导出循环下一帧自停)。
+    let cancelExportChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.PreviewApi.cancelExport\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      cancelExportChannel.setMessageHandler { _, reply in
+        do {
+          try api.cancelExport()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      cancelExportChannel.setMessageHandler(nil)
     }
   }
 }

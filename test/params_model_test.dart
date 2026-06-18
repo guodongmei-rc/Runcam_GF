@@ -66,6 +66,56 @@ class FakeEngineBridge implements EngineBridge {
   @override
   Future<String> getLensInfoFull() async => '{}';
   @override
+  Future<List<double>> quatsAtTimestamp(int timestampUs) async => const [];
+  @override
+  Future<double> getFovAtTimestamp(int timestampUs) async => 0.0;
+  @override
+  Future<void> autosyncStart(
+    String uriOrPath,
+    double initialOffsetMs,
+    double searchSizeSec,
+    int maxSyncPoints,
+    int everyNthFrame,
+    double timePerSyncpointSec,
+    int ofMethod,
+    int poseMethod,
+    int offsetMethod,
+    bool calcInitialFast,
+    bool checkNegativeInitialOffset,
+    bool autoSyncPoints,
+  ) async {}
+  @override
+  Future<void> autosyncCancel() async {}
+  @override
+  Future<void> folderAccessGranted(String folderUrl) async {}
+  @override
+  Future<int> autoloadLensForCamera() async => -2;
+  @override
+  Future<List<double>> gyroTimeline(int count) async => const [];
+  @override
+  Future<List<double>> quaternionTimeline(int count) async => const [];
+  @override
+  Stream<(double, int, int)> get autosyncProgress =>
+      Stream<(double, int, int)>.empty();
+  @override
+  Stream<(double, List<double>, bool)> get autosyncFinished =>
+      Stream<(double, List<double>, bool)>.empty();
+  @override
+  Stream<(double, int, int)> get exportProgress =>
+      Stream<(double, int, int)>.empty();
+  @override
+  Future<String> loadGyro(String uriOrPath, bool loadAllMetadata) async => '{}';
+  @override
+  Future<void> setFrameOffset(int frames) async {}
+  @override
+  Future<String> getGyroInfo() async => '{}';
+  @override
+  Future<void> setImuMedian(int samples) async {}
+  @override
+  Future<void> setImuRotation(double pitchDeg, double rollDeg, double yawDeg) async {}
+  @override
+  Future<void> setImuBias(double x, double y, double z) async {}
+  @override
   Future<void> setImuLpf(double hz) async {
     imuLpfCalls.add(hz);
   }

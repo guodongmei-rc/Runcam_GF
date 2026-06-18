@@ -37,6 +37,13 @@ class VideoInfo {
   double? fps;
   double? durationS;
   int? frameCount;
+  // 媒体信息:gyroflow FFI 不透出音/视频流编码,由原生从 AVAsset(iOS)/
+  // MediaExtractor(Android)读取填入,供「视频信息」面板显示(对齐桌面)。
+  String? videoCodec; // 如 "H.264" / "HEVC"
+  String? pixelFormat; // 如 "YUV420P 8 bit"(取不到=空)
+  String? audioCodec; // 如 "AAC"(无音频轨=空)
+  int? audioSampleRate; // 如 48000(Hz;无音频轨=空)
+  int? rotationDeg; // 0/90/180/270
 }
 
 /// recompute 后的只读输出(供 UI 显示最大修正角 / zoom% = 100/minFov)。
@@ -52,6 +59,18 @@ class PreviewInfo {
   int? textureId;
   int? width;
   int? height;
+}
+
+/// 导出请求(对齐旧原生 runExportFromURL 入参):源视频 + 输出位置 + 编码参数 + 输出尺寸。
+class ExportRequest {
+  String? srcUri; // 源视频 uri/path(当前打开的视频)
+  String? outputUri; // 输出目录 uri/path(已授权);空=由原生兜底临时目录
+  String? fileName; // 输出文件名(含扩展名)
+  int? codecIndex; // 0=H.264 1=HEVC 2=ProRes(对齐 GFExportUtils codecForIndex)
+  int? bitrateMbps; // 0=自动
+  bool? exportAudio;
+  int? width; // 输出宽(偶数)
+  int? height; // 输出高(偶数)
 }
 
 // ============================================================================
@@ -116,6 +135,9 @@ abstract class EngineApi {
   // ---- IMU / 运动数据 ----
   void setGyroOffset(double offsetMs);
   void setImuLpf(double hz);
+  void setImuMedian(int samples); // 中值滤波采样数;0=关
+  void setImuRotation(double pitchDeg, double rollDeg, double yawDeg); // IMU 旋转;全 0=不旋转
+  void setImuBias(double x, double y, double z); // 陀螺 bias(°/s);全 0=无偏置
   void setImuOrientation(String orientation); // 如 "ZyX"
   void setIntegrationMethod(int index); // 0=None 1=Comp 2=VQF 3=Madgwick ...
   void setFrameOffset(int frames); // 整帧粒度对齐(可负)
@@ -124,6 +146,12 @@ abstract class EngineApi {
   String lensSearch(String query); // 返回 JSON [{"name","id"}]
   String loadLens(String uriOrIdOrJson); // 文件/内置id/JSON
   String getLensInfoFull(); // 完整镜头档案 JSON
+
+  /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
+  /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
+  /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
+  /// (安卓 nativeLoadGyro 已在加载时内部自动配镜头,该方法在安卓为 no-op。)
+  int autoloadLensForCamera();
   String loadGyro(String uriOrPath, bool loadAllMetadata);
   void folderAccessGranted(String folderUrl); // 沙盒/SAF 目录白名单
 
@@ -134,10 +162,37 @@ abstract class EngineApi {
   StabInfo recomputeBlocking();
 
   String getVideoMetadata(); // 视频内嵌元数据 JSON
+
+  /// 运动数据当前状态 JSON(供「输入」面板回显):
+  /// {"imu_orientation":"ZyX","has_quaternions":bool,"integration_method":int,
+  ///  "lpf":double,"median":int,"rotation":[p,r,y],"bias":[x,y,z]}
+  /// 安卓 nativeGetGyroInfo 全字段;iOS 用 get_imu_orientation + has_quaternions 拼核心字段。
+  String getGyroInfo();
+
   List<double> gyroTimeline(int count); // 交错 [x,y,z,...] °/s;空=无原始角速度
   List<double> quaternionTimeline(int count); // 交错 [x,y,z,w,...];gyroTimeline 空时退回
   List<double> quatsAtTimestamp(int timestampUs); // double[8]:原始 wijk + 平滑 wijk
   double getFovAtTimestamp(int timestampUs); // HUD zoom% = 100/fov
+
+  // ---- 自动同步(autosync)----
+  // 编排在原生(start→取区间→解灰度帧 feed_frame→finish 逐点写偏移),逐帧喂帧不过桥。
+  // 进度/结束经 EngineEvents.onAutosyncProgress / onAutosyncFinished 回 Dart。
+  // 参数 1:1 对齐 gyroflow_autosync_start;前置:已加载镜头档案 + 有运动数据。
+  void autosyncStart(
+    String uriOrPath,
+    double initialOffsetMs,
+    double searchSizeSec,
+    int maxSyncPoints,
+    int everyNthFrame,
+    double timePerSyncpointSec,
+    int ofMethod, // 光流:2=OpenCV DIS(官方默认)
+    int poseMethod, // 位姿:0=findEssentialMat(官方默认)
+    int offsetMethod, // 偏移:2=rs-sync(官方默认)
+    bool calcInitialFast,
+    bool checkNegativeInitialOffset,
+    bool autoSyncPoints,
+  );
+  void autosyncCancel();
 }
 
 // ============================================================================
@@ -179,6 +234,10 @@ abstract class PreviewApi {
   void pause();
   void seekTo(int timestampUs);
 
+  /// 暂停态按需重渲当前帧:参数改动后 recompute 完,主动刷新一次预览
+  /// (播放时渲染循环已连续刷新,无需调用)。
+  void renderOnce();
+
   /// 取并清零"自上次调用以来 copyPixelBuffer 被调次数"= Flutter 实际合成/上屏该
   /// 纹理的帧数。每秒调一次即得真实合成 FPS(Dart 的 addTimingsCallback 只统计框架帧、
   /// 看不到外部纹理合成,故须在原生侧计数)。
@@ -186,4 +245,13 @@ abstract class PreviewApi {
 
   /// 导出模式:开启后逐帧只渲输出供回读、不上屏(对齐 nativeSetExportMode)。
   void setExportMode(bool on);
+
+  /// 开始导出(对齐旧原生 runExportFromURL):复用共享 stabilizer 逐帧
+  /// 解码→process_frame→编码写文件,进度经 EngineEvents.onExportProgress 回报。
+  /// 返回空串=成功;非空=错误信息(取消时返回「已取消」)。
+  @async
+  String startExport(ExportRequest req);
+
+  /// 取消进行中的导出(置标志,导出循环下一帧自停)。
+  void cancelExport();
 }

@@ -42,6 +42,7 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   int _compositeCount;          // copyPixelBuffer 被调次数(= Flutter 合成上屏帧数)
   int _produceCount;            // GPU 产出帧数(= 真实解码+防抖出帧率)
   BOOL _tornDown;               // dispose 后置位:在飞的 GPU 完成回调据此早退,避免 UAF
+  BOOL _hasRenderedAnyFrame;    // 本视频是否产出过至少一帧(对齐 ViewController.mm hasRenderedAnyMDKFrame:首帧黑屏兜底)
 
   // 增量 C:Metal + MDK 解码 + Gyroflow 防抖。
   id<MTLDevice> _device;
@@ -124,6 +125,7 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   _mdkInput = [self makeMDKInputTextureWithWidth:_inW height:_inH];
 
   // MDK 播放器(镜像 ViewController.mm setupMDKPlayer / configureMDKRenderAPI)。
+  _hasRenderedAnyFrame = NO; // 新视频:首帧兜底标志复位
   [self setupMDKPlayerWithUri:uri];
 
   return CGSizeMake(_outW, _outH);
@@ -216,7 +218,17 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
 #pragma mark - 背靠背连续渲驱动:解码 + 防抖
 
 - (void)play {
-  if (_player) { _player->set(mdk::State::Playing); }
+  if (_player) {
+    // 已播到末尾时:先 Stopped 复位再 Playing → 从 0 重播(对齐原生 ViewController:1561/636 ——
+    // MDK 到尾切 Stopped,set(Playing) 自动从头)。否则停在末帧的 Paused 态 set(Playing) 画面不动。
+    int64_t dur = _player->mediaInfo().duration; // ms
+    int64_t pos = _player->position();           // ms
+    if (dur > 0 && pos >= dur - 50) {
+      _player->set(mdk::State::Stopped);
+      _lastProcessedTsUs = INT64_MIN; // 让重播首帧不被「同帧去重」挡掉
+    }
+    _player->set(mdk::State::Playing);
+  }
   [_lock lock];
   if (_renderLoopRunning || _tornDown) { [_lock unlock]; return; } // 已在跑/已销毁
   _renderLoopRunning = YES;
@@ -229,6 +241,21 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
   [_lock lock];
   _renderLoopRunning = NO; // 循环下一轮自停(省电);play 再起一个新循环
   [_lock unlock];
+}
+
+// 暂停 + 同步排空渲染队列:置停标志后,在渲染队列上 dispatch_sync 一个空块,
+// 等当前在飞的那帧 renderOneFrame(含 process_frame)彻底跑完再返回。导出前调用,
+// 避免导出线程与预览渲染循环并发访问同一 stabilizer 而崩溃。
+- (void *)metalDevicePtr { return (__bridge void *)_device; }
+- (void *)commandQueuePtr { return (__bridge void *)_queue; }
+
+- (void)pauseAndDrain {
+  [self pause];
+  BOOL torn;
+  [_lock lock]; torn = _tornDown; [_lock unlock];
+  if (!torn) {
+    dispatch_sync(_renderQueue, ^{ /* 仅为等队列里在飞的那帧结束 */ });
+  }
 }
 
 // 渲染循环一拍:渲一帧 → 渲完立刻排下一拍(背靠背,不被 60Hz tick 量化 → 节奏均匀如原生)。
@@ -346,6 +373,8 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
     if (s->_tornDown) { [s->_lock unlock]; return; } // dispose 后早退,勿触碰已释放的 pool
     s->_latest = pb;
     s->_produceCount++;
+    s->_hasRenderedAnyFrame = YES; // 已真正产出一帧:首帧兜底循环可停
+
     NSObject<FlutterTextureRegistry> *reg = s->_registry;
     int64_t tid = s->_textureId;
     [s->_lock unlock];
@@ -361,7 +390,54 @@ static const void *PreviewCurrentRenderTarget(const void *opaque);
 }
 
 - (void)seekToUs:(int64_t)timestampUs {
-  if (_player) { _player->seek(timestampUs / 1000); } // MDK seek 单位 ms
+  if (_player) {
+    _player->seek(timestampUs / 1000); // MDK seek 单位 ms
+    // 重置同帧去重戳:seek 后落点帧即便 ts 与上次巧合相同,也必须当作新帧渲出
+    // (尤其末尾重播 seek(0):避免 renderOneFrame 误判同帧 → NO → 画面不动)。
+    _lastProcessedTsUs = INT64_MIN;
+  }
+}
+
+// 暂停态:参数改动 recompute 后,主动重渲当前帧一次。播放时渲染循环已连续刷新,
+// 不需要(且会与循环并发),故仅在循环未跑时执行。MDK 已 Paused,renderVideo 停在
+// 当前帧;重置 _lastProcessedTsUs 让 renderOneFrame 跳过「同帧去重」用新变换重处理。
+- (void)renderOnce {
+  dispatch_async(_renderQueue, ^{
+    [self->_lock lock];
+    BOOL skip = self->_tornDown || self->_renderLoopRunning;
+    BOOL primed = self->_hasRenderedAnyFrame;
+    [self->_lock unlock];
+    if (skip) { return; }
+    if (primed) {
+      // 已出过帧:暂停态参数 recompute 后单次重渲(MDK 停在当前帧)。
+      self->_lastProcessedTsUs = INT64_MIN;
+      [self renderOneFrame];
+    } else {
+      // 首帧尚未渲出:走兜底,处理 prepare 异步未解完的黑屏竞态。
+      [self primeFirstFrame:0 seeked:NO];
+    }
+  });
+}
+
+// 首帧黑屏兜底 —— 严格对齐 ViewController.mm prepare 回调:无回调的 prepare(0) 是异步的,
+// 首帧常未解出,renderVideo() 返回 -1 → renderOneFrame 直接 NO → 单次 renderOnce 渲不出 → 黑屏。
+// 在渲染队列上轮询 renderOneFrame 直到产出首帧;短暂等待仍无帧则 seek(0) 逼 MDK 解首帧
+// (对齐原生 hasRenderedAnyMDKFrame==NO → seek(0),高码率文件 prepare 期间首帧根本没解完)。
+// 每拍重投前查 _tornDown/_renderLoopRunning/_hasRenderedAnyFrame,teardown 不被阻塞;上限 ~2s。
+- (void)primeFirstFrame:(int)attempt seeked:(BOOL)seeked {
+  [_lock lock];
+  BOOL stop = _tornDown || _renderLoopRunning || _hasRenderedAnyFrame;
+  [_lock unlock];
+  if (stop || attempt > 120) { return; }
+  _lastProcessedTsUs = INT64_MIN;
+  if ([self renderOneFrame]) { return; } // 产出首帧(renderOneFrame 完成回调里置 _hasRenderedAnyFrame)
+  if (!seeked && attempt >= 6 && _player) {
+    _player->seek(0); // 逼 MDK 解首帧:解完触发的下一拍 renderVideo 会拿到帧
+    seeked = YES;
+  }
+  __weak typeof(self) ws = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.016 * NSEC_PER_SEC)),
+                 _renderQueue, ^{ [ws primeFirstFrame:attempt + 1 seeked:seeked]; });
 }
 
 - (void)releasePool {
