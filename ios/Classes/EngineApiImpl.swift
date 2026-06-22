@@ -143,7 +143,8 @@ final class EngineApiImpl: EngineApi {
                     pixelFormat: nil, // AVAsset 难可靠取像素格式 → 留 nil(Dart 显示「---」)
                     audioCodec: av.audioCodec,
                     audioSampleRate: av.audioSampleRate,
-                    rotationDeg: av.rotationDeg
+                    rotationDeg: av.rotationDeg,
+                    videoBitrate: av.videoBitrate
                 )))
             }
         }
@@ -159,14 +160,15 @@ final class EngineApiImpl: EngineApi {
         return URL(fileURLWithPath: s)
     }
 
-    /// 同步读取 AVAsset 的视频/音频编解码、音频采样率、视频旋转角。读不到返回 nil。
+    /// 同步读取 AVAsset 的视频/音频编解码、音频采样率、视频旋转角、源视频码率。读不到返回 nil。
     private func extractAVInfo(_ uriOrPath: String)
-        -> (videoCodec: String?, audioCodec: String?, audioSampleRate: Int64?, rotationDeg: Int64?) {
-        guard let url = resolveURL(uriOrPath) else { return (nil, nil, nil, nil) }
+        -> (videoCodec: String?, audioCodec: String?, audioSampleRate: Int64?, rotationDeg: Int64?, videoBitrate: Int64?) {
+        guard let url = resolveURL(uriOrPath) else { return (nil, nil, nil, nil, nil) }
         let asset = AVURLAsset(url: url)
 
         var videoCodec: String?
         var rotationDeg: Int64?
+        var videoBitrate: Int64?
         if let vt = asset.tracks(withMediaType: .video).first {
             if let fmts = vt.formatDescriptions as? [CMFormatDescription], let fd = fmts.first {
                 videoCodec = EngineApiImpl.videoCodecName(CMFormatDescriptionGetMediaSubType(fd))
@@ -177,6 +179,8 @@ final class EngineApiImpl: EngineApi {
             var deg = Int(angle.rounded())
             deg = ((deg % 360) + 360) % 360
             rotationDeg = Int64(deg)
+            // 源视频码率(bit/s),对齐官方默认导出比特率。
+            if vt.estimatedDataRate > 0 { videoBitrate = Int64(vt.estimatedDataRate) }
         }
 
         var audioCodec: String?
@@ -189,7 +193,7 @@ final class EngineApiImpl: EngineApi {
             if asbd.mSampleRate > 0 { audioSampleRate = Int64(asbd.mSampleRate) }
         }
 
-        return (videoCodec, audioCodec, audioSampleRate, rotationDeg)
+        return (videoCodec, audioCodec, audioSampleRate, rotationDeg, videoBitrate)
     }
 
     private static func videoCodecName(_ subType: FourCharCode) -> String {

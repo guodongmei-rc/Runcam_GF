@@ -1557,14 +1557,23 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeSetSmoothingP
     }).resolve::<ThrowRuntimeExAndDefault>()
 }
 
-/// 锁定地平线(amount %, 0=关; roll = Roll 角度校正 °)。其余参数用默认。
-/// 对齐桌面 Stabilization.qml updateHorizonLock: set_horizon_lock(lockAmount, roll, ...)。
+/// 锁定地平线 —— 全 9 参,对齐 iOS gyroflow_set_horizon_lock / 桌面 set_horizon_lock:
+/// amount %(0=关)、roll 校正°、锁定俯仰 + pitch°、自动锁定 + 转向阈值/平滑 ms/倍数/倾斜加速限制。
 #[no_mangle]
 pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeSetHorizonLock<'local>(
-    mut env: EnvUnowned<'local>, _class: JClass<'local>, amount: jdouble, roll: jdouble,
+    mut env: EnvUnowned<'local>, _class: JClass<'local>,
+    amount: jdouble, roll: jdouble,
+    lock_pitch: jboolean, pitch: jdouble,
+    automatic: jboolean, turn_threshold: jdouble,
+    turn_smoothing: jdouble, turn_multiplier: jdouble, tilt_accel_limit: jdouble,
 ) -> jint {
     env.with_env(|_e| -> jni::errors::Result<jint> {
-        stab_apply(|m| m.set_horizon_lock(amount, roll, false, 0.0, false, 0.0, 0.0, 0.0, 0.0));
+        stab_apply(|m| m.set_horizon_lock(
+            amount, roll,
+            lock_pitch, pitch,
+            automatic, turn_threshold,
+            turn_smoothing, turn_multiplier, tilt_accel_limit,
+        ));
         Ok(0)
     }).resolve::<ThrowRuntimeExAndDefault>()
 }

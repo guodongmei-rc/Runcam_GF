@@ -31,12 +31,34 @@ class VideoDecoder(
     @Volatile private var seekToStart = false
     @Volatile private var seekTargetUs = -1L // >=0 表示有待处理 seek
     @Volatile private var durationUs = 0L
+    @Volatile private var lastRenderedPtsUs = -1L // 最近渲染帧的 pts,供 rerender() 暂停态重渲
 
     /** 跳到进度 0.0–1.0(陀螺时间轴拖动用)。暂停时也会渲染目标帧。 */
     fun seekTo(progress: Double) {
         if (durationUs > 0L) {
             seekTargetUs = (progress.coerceIn(0.0, 1.0) * durationUs).toLong()
         }
+    }
+
+    /** 跳到绝对时间戳(微秒)。供 PreviewApi.seekTo 直接用,无需先知时长。暂停时也渲染目标帧。 */
+    fun seekToUs(us: Long) {
+        val t = us.coerceAtLeast(0L)
+        // 把"当前位置锚点"也设成目标:即便解码循环已消费 seek、随后的 rerender 也重渲到此处,
+        // 不会退回上一帧(修复暂停态拖 seek 后 renderOnce 把画面拉回旧帧)。
+        lastRenderedPtsUs = t
+        seekTargetUs = t
+    }
+
+    /**
+     * 暂停态参数改动后重渲当前帧:把 seek 目标置为最近渲染帧的 pts,让解码循环用新变换
+     * 重新喂一遍(对齐旧 GyroflowActivity 的 seekTo(lastProgress) 重渲)。尚无渲染帧则跳过。
+     */
+    fun rerender() {
+        // 已有待处理 seek 时绝不覆盖:暂停态拖 seek 时 Dart 紧接着会 renderOnce→rerender,
+        // 若覆盖 seekTargetUs 会把目标改回上一帧 → 画面不动。
+        if (seekTargetUs >= 0L) return
+        val t = lastRenderedPtsUs
+        if (t >= 0L) seekTargetUs = t
     }
 
     fun start() {
@@ -198,6 +220,7 @@ class VideoDecoder(
     private fun renderOutput(codec: MediaCodec, outIdx: Int, ptsUs: Long) {
         val image = codec.getOutputImage(outIdx) ?: return
         onFrame(YuvPacker.pack(image), ptsUs)
+        lastRenderedPtsUs = ptsUs // 记录最近渲染帧,供 rerender() 暂停态重渲
         image.close()
     }
 }

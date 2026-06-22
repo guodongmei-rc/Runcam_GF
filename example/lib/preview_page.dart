@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'edit/edit_controller.dart';
 import 'edit/gyro_widgets.dart';
@@ -81,11 +82,14 @@ class _PreviewPageState extends State<PreviewPage>
                       style: const TextStyle(
                           color: GfColors.textSecondary, fontSize: 12)),
                 ),
-                TextButton(
-                  onPressed: _c.uri == null || _c.busy ? null : _c.switchBackend,
-                  child: Text('切到 ${_c.backend.other.label}',
-                      style: const TextStyle(color: GfColors.accent)),
-                ),
+                // PlatformView 对照后端仅 iOS 实现;安卓只 Texture(对齐设计:
+                // 原生全屏页的 SurfaceView 已是参照),隐藏切换以免触发 iOS-only UiKitView。
+                if (defaultTargetPlatform != TargetPlatform.android)
+                  TextButton(
+                    onPressed: _c.uri == null || _c.busy ? null : _c.switchBackend,
+                    child: Text('切到 ${_c.backend.other.label}',
+                        style: const TextStyle(color: GfColors.accent)),
+                  ),
                 const SizedBox(width: 4),
               ],
             ),

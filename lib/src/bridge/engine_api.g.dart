@@ -40,6 +40,7 @@ class VideoInfo {
     this.audioCodec,
     this.audioSampleRate,
     this.rotationDeg,
+    this.videoBitrate,
   });
 
   int? width;
@@ -66,6 +67,8 @@ class VideoInfo {
 
   int? rotationDeg;
 
+  int? videoBitrate;
+
   Object encode() {
     return <Object?>[
       width,
@@ -80,6 +83,7 @@ class VideoInfo {
       audioCodec,
       audioSampleRate,
       rotationDeg,
+      videoBitrate,
     ];
   }
 
@@ -98,6 +102,7 @@ class VideoInfo {
       audioCodec: result[9] as String?,
       audioSampleRate: result[10] as int?,
       rotationDeg: result[11] as int?,
+      videoBitrate: result[12] as int?,
     );
   }
 }

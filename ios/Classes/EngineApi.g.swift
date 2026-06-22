@@ -84,6 +84,7 @@ struct VideoInfo {
   var audioCodec: String? = nil
   var audioSampleRate: Int64? = nil
   var rotationDeg: Int64? = nil
+  var videoBitrate: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -100,6 +101,7 @@ struct VideoInfo {
     let audioCodec: String? = nilOrValue(pigeonVar_list[9])
     let audioSampleRate: Int64? = nilOrValue(pigeonVar_list[10])
     let rotationDeg: Int64? = nilOrValue(pigeonVar_list[11])
+    let videoBitrate: Int64? = nilOrValue(pigeonVar_list[12])
 
     return VideoInfo(
       width: width,
@@ -113,7 +115,8 @@ struct VideoInfo {
       pixelFormat: pixelFormat,
       audioCodec: audioCodec,
       audioSampleRate: audioSampleRate,
-      rotationDeg: rotationDeg
+      rotationDeg: rotationDeg,
+      videoBitrate: videoBitrate
     )
   }
   func toList() -> [Any?] {
@@ -130,6 +133,7 @@ struct VideoInfo {
       audioCodec,
       audioSampleRate,
       rotationDeg,
+      videoBitrate,
     ]
   }
 }

@@ -191,7 +191,10 @@ class GyroflowStabilizePanel(
     private fun applyHorizon() {
         val amount = if (horizonOn) horizonAmount else 0.0
         val roll = if (horizonOn) horizonRoll else 0.0
-        onApply { GyroflowNative.nativeSetHorizonLock(amount, roll) }
+        // 旧全屏页只暴露 锁定量/Roll;高级 7 参传默认(与扩签名前行为一致)。
+        onApply {
+            GyroflowNative.nativeSetHorizonLock(amount, roll, false, 0.0, false, 0.0, 0.0, 0.0, 0.0)
+        }
     }
 
     /** 刷新「最大旋转/最大缩放」只读信息(读 nativeGetStabInfo)。 */

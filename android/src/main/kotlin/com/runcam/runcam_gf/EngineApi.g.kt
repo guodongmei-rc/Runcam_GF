@@ -66,7 +66,8 @@ data class VideoInfo (
   val pixelFormat: String? = null,
   val audioCodec: String? = null,
   val audioSampleRate: Long? = null,
-  val rotationDeg: Long? = null
+  val rotationDeg: Long? = null,
+  val videoBitrate: Long? = null
 )
  {
   companion object {
@@ -83,7 +84,8 @@ data class VideoInfo (
       val audioCodec = pigeonVar_list[9] as String?
       val audioSampleRate = pigeonVar_list[10] as Long?
       val rotationDeg = pigeonVar_list[11] as Long?
-      return VideoInfo(width, height, outputWidth, outputHeight, fps, durationS, frameCount, videoCodec, pixelFormat, audioCodec, audioSampleRate, rotationDeg)
+      val videoBitrate = pigeonVar_list[12] as Long?
+      return VideoInfo(width, height, outputWidth, outputHeight, fps, durationS, frameCount, videoCodec, pixelFormat, audioCodec, audioSampleRate, rotationDeg, videoBitrate)
     }
   }
   fun toList(): List<Any?> {
@@ -100,6 +102,7 @@ data class VideoInfo (
       audioCodec,
       audioSampleRate,
       rotationDeg,
+      videoBitrate,
     )
   }
 }

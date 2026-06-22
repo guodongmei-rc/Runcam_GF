@@ -29,13 +29,12 @@ class _ExportPanelState extends State<ExportPanel> {
   EditController get c => widget.controller;
   ParamsModel get m => widget.controller.params;
 
-  // 编码器:只列移动端真能导出的(对齐原生 GFExportUtils codecForIndex:0=H.264/1=HEVC/2=ProRes)。
-  // DNxHD/CineForm 是桌面 ffmpeg 专业编码,AVAssetWriter/MediaCodec 不支持,不列。
-  // 索引必须与原生 codecForIndex 一致(exportCodecIndex 直接传原生)。
+  // 编码器:只列两端真能导出的(索引与原生 codecForIndex 一致,exportCodecIndex 直接传原生:
+  // 0=H.264 / 1=HEVC)。ProRes 422 已去掉:安卓无硬件 ProRes 编码器(选了也会被静默当 HEVC),
+  // 故移除该选项,只留两端通用的 H.264/HEVC。DNxHD/CineForm 是桌面 ffmpeg 专业编码,同样不列。
   static const _codecs = [
     (name: 'H.264/AVC', gpu: true, audio: true, bitrate: true, maxW: 4096, maxH: 4096, ext: '.mp4'),
     (name: 'H.265/HEVC', gpu: true, audio: true, bitrate: true, maxW: 8192, maxH: 8192, ext: '.mp4'),
-    (name: 'ProRes 422', gpu: true, audio: true, bitrate: false, maxW: 16384, maxH: 16384, ext: '.mov'),
   ];
 
   @override
@@ -64,8 +63,9 @@ class _ExportPanelState extends State<ExportPanel> {
 
   // 视频/编码器换了(尺寸+编码器索引当指纹)→ 回填宽高/比特率/文件名框。
   void _refillIfNeeded() {
-    final seq = (c.exportWidth * 100000 + c.exportHeight) * 10 +
-        m.exportCodecIndex.clamp(0, _codecs.length - 1);
+    // 指纹含比特率:打开视频后默认比特率按源码率变了,也要回填输入框(否则停留在旧值如 63)。
+    final seq = Object.hash(c.exportWidth, c.exportHeight,
+        m.exportCodecIndex.clamp(0, _codecs.length - 1), m.exportBitrateMbps);
     if (seq == _lastSeq) return;
     _lastSeq = seq;
     _w.text = '${c.exportWidth}';
@@ -108,9 +108,8 @@ class _ExportPanelState extends State<ExportPanel> {
       (label: '8k', w: 4320, h: 7680), (label: '6k', w: 3384, h: 6016),
       (label: '4k', w: 2160, h: 3840), (label: '1080p', w: 1080, h: 1920),
     ]),
-    (label: '4:3', wp: 4, hp: 3, fixed: [
-      (label: '4k', w: 2880, h: 2160), (label: '1080p', w: 1440, h: 1080),
-    ]),
+    // 4:3 官方无 4K/1080p 标准预设(原仅 480p,<1080P 已去掉)→ 只留 原始/比例/基于最大缩放。
+    (label: '4:3', wp: 4, hp: 3, fixed: []),
     (label: '1:1', wp: 1, hp: 1, fixed: [
       (label: '4k', w: 2160, h: 2160), (label: '1080p', w: 1080, h: 1080),
     ]),
@@ -126,12 +125,10 @@ class _ExportPanelState extends State<ExportPanel> {
       (label: '原始', w: inW, h: inH), // Original = 输入尺寸
     ];
     final scale = math.min(inW / g.wp, inH / g.hp);
-    final pw = even(g.wp * scale), ph = even(g.hp * scale);
-    list.add((label: '比例', w: pw, h: ph)); // Proportional
-    final mf = m.minFov; // 基于最大缩放 = 比例 × minFov(=100/maxZoom)
-    if (mf > 0) {
-      list.add((label: '基于最大缩放', w: even(pw * mf), h: even(ph * mf)));
-    }
+    final pw = even(g.wp * scale), ph = even(g.hp * scale); // Proportional(取整,对齐官方 nw/nh)
+    list.add((label: '比例', w: pw, h: ph));
+    // 「基于最大缩放」已去掉:它依赖引擎在「降采样后的预览 output_size」上算出的 min_fov,
+    // 与官方(全分辨率)不一致、两端也不一致,会误导用户。去掉,只留 原始/比例/固定尺寸。
     for (final p in g.fixed) {
       list.add((label: p.label, w: p.w, h: p.h));
     }

@@ -17,9 +17,11 @@ API="${API:-26}"
 PROFILE="${BUILD_PROFILE:-release}"
 SO_NAME="libruncam_gyroflow.so"
 
+# PROJECT_DIR = 插件的 android/ 目录(本脚本在 android/rust/ 下)。
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRIDGE_DIR="$PROJECT_DIR/android/rust/runcam_gyroflow"
-JNILIBS="$PROJECT_DIR/android/app/src/main/jniLibs"
+BRIDGE_DIR="$PROJECT_DIR/rust/runcam_gyroflow"
+# Flutter 插件打包的就是 android/src/main/jniLibs/<abi>/(Gradle 无 cargo 步,只装这个预编译 .so)。
+JNILIBS="$PROJECT_DIR/src/main/jniLibs"
 
 GYROFLOW_SRC="${GYROFLOW_SRC:-/Users/gdm/Desktop/gyroflow-master5.6ios}"
 OCV_SDK="${OCV_SDK:-$GYROFLOW_SRC/ext/OpenCV-android-sdk}"
@@ -54,7 +56,7 @@ if [ -d "$OCV_SDK" ]; then
   export OPENCV_INCLUDE_PATHS="$OCV_SDK/sdk/native/jni/include"
   # opencv 生成器探测 CLANG_PATH 的 clang 取其 C++ 搜索路径; 指向带 --target/--sysroot 的 NDK clang
   # 包装, 探测到的就是正确的 android 顺序(c++/v1→内建→C库), <cstddef> 才能找对 libc++ 的 stddef.h。
-  CLANG_WRAP="$PROJECT_DIR/scripts/.ndk-clang-wrap"
+  CLANG_WRAP="$BRIDGE_DIR/.ndk-clang-wrap"
   cat > "$CLANG_WRAP" <<WRAP
 #!/bin/sh
 exec "$NDK_TC/bin/clang" --target=${TRIPLE}${API} --sysroot="$SYSROOT" "\$@"

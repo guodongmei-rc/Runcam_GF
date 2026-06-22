@@ -28,6 +28,7 @@ class RuncamGfPlugin :
     private lateinit var channel: MethodChannel
     private var activity: Activity? = null
     private var engineEvents: EngineEvents? = null // 阶段2:原生→Dart 回调通道
+    private var previewApi: PreviewApiImpl? = null  // 阶段1:预览 Texture + 导出转发壳
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, "com.runcam/gyroflow")
@@ -40,6 +41,11 @@ class RuncamGfPlugin :
             binding.binaryMessenger,
             EngineApiImpl(binding.applicationContext, events),
         )
+
+        // 阶段1:注册预览 API(共享同一 .so 单例引擎 + 插件纹理注册表;导出进度复用同一 events)。
+        val preview = PreviewApiImpl(binding.applicationContext, binding.textureRegistry, events)
+        PreviewApi.setUp(binding.binaryMessenger, preview)
+        previewApi = preview
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -60,6 +66,9 @@ class RuncamGfPlugin :
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
         EngineApi.setUp(binding.binaryMessenger, null)
+        PreviewApi.setUp(binding.binaryMessenger, null)
+        previewApi?.shutdown()
+        previewApi = null
         engineEvents = null
     }
 

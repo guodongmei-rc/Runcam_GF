@@ -1,74 +1,76 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code(claude.ai/code)在本仓库工作时提供指引。
 
-## What this is
+## 这是什么
 
-`runcam_gf` is a Flutter **plugin** wrapping the Gyroflow video-stabilization engine for iOS and Android. The repo is mid-migration (see `docs/flutter-ui-migration.md`): the goal is to move the editor UI + parameter state from two native codebases (iOS Obj-C/Swift, Android Kotlin) into **one shared Dart layer**, while keeping native only for the four things it must do — video decode, GPU preview render, export encoding, and file picking/permissions. The Rust core, `ios/Libs/gyroflow_ffi.h`, and `android/.../GyroflowNative.kt` are **not** to be modified — only thin forwarding shells around them.
+`runcam_gf` 是一个把 Gyroflow 视频防抖引擎封装给 iOS 与 Android 的 Flutter **插件**。仓库正处于迁移中期(见 `docs/flutter-ui-migration.md`):目标是把编辑器 UI + 参数状态从两套原生代码(iOS Obj-C/Swift、Android Kotlin)迁到**一层共享的 Dart**,原生只保留它必须做的四件事——视频解码、GPU 预览渲染、导出编码、文件选择/权限。Rust core、`ios/Libs/gyroflow_ffi.h`、`android/.../GyroflowNative.kt` **不得修改**——只在它们外面写薄薄的转发壳。
 
-Most code comments and docs are in Chinese; match that when editing existing files.
+绝大多数代码注释与文档为中文;编辑既有文件时保持一致。
 
-## Commands
+## 命令
 
-Run everything from `example/` for device builds; from repo root for the plugin's own tests.
+设备构建一律在 `example/` 下跑;插件自身的测试在仓库根目录跑。
 
 ```bash
-# Plugin unit tests (pure Dart, no device)
-flutter test                              # repo root — runs test/params_model_test.dart
-flutter test test/params_model_test.dart --plain-name "smoothness"   # single test by name
+# 插件单元测试(纯 Dart,无需设备)
+flutter test                              # 仓库根目录 — 跑 test/params_model_test.dart
+flutter test test/params_model_test.dart --plain-name "smoothness"   # 按名字跑单条测试
 
-# Example app unit/widget tests
-cd example && flutter test                # runs example/test/stabilize_panel_test.dart
+# 示例 App 单元/Widget 测试
+cd example && flutter test                # 跑 example/test/stabilize_panel_test.dart
 
-# Run the example app (REAL DEVICE ONLY — see below)
-cd example && flutter run                 # pick an attached iOS/Android device
+# 运行示例 App(仅限真机 — 见下)
+cd example && flutter run                 # 选一台已连接的 iOS/Android 设备
 
-# Static analysis (flutter_lints via analysis_options.yaml)
+# 静态分析(flutter_lints,见 analysis_options.yaml)
 flutter analyze
 
-# Regenerate the Pigeon bridge after editing pigeons/runcam_gf_api.dart
+# 改完 pigeons/runcam_gf_api.dart 后重新生成 Pigeon 桥
 dart run pigeon --input pigeons/runcam_gf_api.dart
 ```
 
-**Device-only constraint:** the native engine ships as arm64 static libs (iOS) / `.so` (Android) with no simulator slices. iOS Simulator throws `SIMULATOR_UNSUPPORTED`. Any engine/preview/export work must be verified on a physical device; only the Dart `ParamsModel`/widget tests run host-side.
+**仅限真机:** 原生引擎以 arm64 静态库(iOS)/ `.so`(Android)发布,无模拟器切片。iOS 模拟器会抛 `SIMULATOR_UNSUPPORTED`。任何引擎/预览/导出相关的改动都必须在真机上验证;只有 Dart 的 `ParamsModel`/Widget 测试能在宿主机跑。
 
-## Architecture
+## 架构
 
-Three layers, top to bottom:
+自顶向下三层:
 
-1. **Dart UI + state** (shared, the migration target). The example editor lives in `example/lib/edit/`: `EditController` (a `ChangeNotifier`) owns the engine lifecycle, the `ParamsModel`, and the current preview backend; panels under `edit/panels/` only read/write `ParamsModel` and never touch a channel directly.
+1. **Dart UI + 状态**(共享,迁移目标)。示例编辑器在 `example/lib/edit/`:`EditController`(一个 `ChangeNotifier`)持有引擎生命周期、`ParamsModel` 与当前预览后端;`edit/panels/` 下的面板只读写 `ParamsModel`,绝不直接碰 channel。
 
-2. **Pigeon bridge** — the single source of truth is `pigeons/runcam_gf_api.dart`. It generates `lib/src/bridge/engine_api.g.dart` (Dart), `ios/Classes/EngineApi.g.swift`, and `android/.../EngineApi.g.kt`. **Never hand-edit the `.g.*` files.** Three interfaces:
-   - `EngineApi` (HostApi, Dart→native): discrete parameter setters/getters, `recomputeBlocking`, lens, timelines.
-   - `PreviewApi` (HostApi): create/dispose preview texture, play/pause/seek, export mode.
-   - `EngineEvents` (FlutterApi, native→Dart): recompute-finished, autosync/export progress, playback ticks.
-   High-frequency per-frame `process`/autosync feeding does **not** go over the bridge — it stays inside native.
+2. **Pigeon 桥** —— 唯一事实源是 `pigeons/runcam_gf_api.dart`。它生成 `lib/src/bridge/engine_api.g.dart`(Dart)、`ios/Classes/EngineApi.g.swift`、`android/.../EngineApi.g.kt`。**绝不手改 `.g.*` 文件。** 三个接口:
+   - `EngineApi`(HostApi,Dart→原生):离散的参数 setter/getter、`recomputeBlocking`、镜头、时间线。
+   - `PreviewApi`(HostApi):创建/销毁预览纹理、play/pause/seek/renderOnce、`startExport`/`cancelExport`。
+   - `EngineEvents`(FlutterApi,原生→Dart):recompute 完成、autosync/导出进度、播放推进。
+   高频的逐帧 `process`/autosync 喂帧**不走**桥——留在原生内部。
 
-3. **Native thin shells** forward Pigeon calls to the existing engine:
-   - iOS `EngineApiImpl.swift` / `PreviewApiImpl.swift` → `gyroflow_*` C FFI (`ios/Libs/gyroflow_ffi.h`); MDK decode + Metal render + AVAssetWriter export.
-   - Android `EngineApiImpl.kt` → `GyroflowNative.kt` JNI; MediaCodec decode + wgpu render + MediaCodec export.
-   The legacy native full-screen editor still exists (`GyroflowActivity`, `GyroflowLauncher`) and is reachable via `RuncamGF.open()` over the **separate** `com.runcam/gyroflow` channel — independent of the Pigeon bridge.
+3. **原生薄壳**把 Pigeon 调用转发到既有引擎:
+   - iOS `EngineApiImpl.swift` / `PreviewApiImpl.swift`(+ `PreviewController.mm`)→ `gyroflow_*` C FFI(`ios/Libs/gyroflow_ffi.h`);MDK 解码 + Metal 渲染 + AVAssetWriter 导出。
+   - Android `EngineApiImpl.kt` / `PreviewApiImpl.kt`(+ `PreviewController.kt`)→ `GyroflowNative.kt` JNI;MediaCodec 解码(`VideoDecoder.kt`)+ wgpu 渲染 + MediaCodec 导出(`GyroflowExporter.kt`,被新的预览壳原样复用)。
+   旧的原生全屏编辑器仍在(`GyroflowActivity`、`GyroflowLauncher`),经 `RuncamGF.open()` 走**独立的** `com.runcam/gyroflow` channel 拉起——与 Pigeon 桥互不相干。Android 引擎是 **`.so` 单例**(无 per-stabilizer 句柄),所以预览壳通过调同样的 `GyroflowNative.*` 自动与 `EngineApiImpl` 共享状态;iOS 则是把 `stabilizerHandle` 闭包传进 `PreviewApiImpl`。
 
-### ParamsModel — the core of the Dart state layer
+### ParamsModel —— Dart 状态层的核心
 
-`lib/src/state/params_model.dart` (+ `part` files `params_model_{stabilize,zoom,advanced}.dart`) mirrors the authoritative `ios/Sources/ParamsModel.m`. Every parameter setter follows the same contract:
+`lib/src/state/params_model.dart`(+ `part` 文件 `params_model_{stabilize,zoom,advanced}.dart`)镜像权威的 `ios/Sources/ParamsModel.m`。每个参数 setter 都遵循同一契约:
 
-**clamp → push to engine immediately → arm a shared 200ms debounce → `recomputeBlocking` → write back read-only outputs (`maxAngle{Pitch,Yaw,Roll}`, `minFov`) → `notifyListeners`.**
+**clamp → 立即 push 给引擎 → 启动一个共享的 200ms 防抖 → `recomputeBlocking` → 写回只读输出(`maxAngle{Pitch,Yaw,Roll}`、`minFov`)→ `notifyListeners`。**
 
-Key conventions baked in (don't "fix" these without checking `.m`):
-- `defaults.dart` and `clamp.dart` are transcribed from `ParamsModel.m`; where `.h` comments disagree with `.m`, **`.m` wins** (noted inline).
-- Some params need multi-field atomic pushes via dedicated methods: `pushHorizonLock` (9 args; amount forced 0 when lock off), `pushVideoSpeed`, `pushBackgroundColor`, `pushAdaptiveZoom` (croppingMode→adaptive_zoom mapping 0→0.0 / 1→sec / 2→-1.0).
-- `pushAllDefaultsAndRecompute()` is called once by the controller after `createStabilizer`, pushing every FFI-backed value then recomputing directly (bypassing debounce).
-- `ParamsModel` depends only on the `EngineBridge` abstract interface (`lib/src/state/engine_bridge.dart`), so tests inject `FakeEngineBridge`. The real `EngineBridgeImpl` 1:1-forwards to the generated `EngineApi`.
+已固化的关键约定(不核对 `.m` 别去“修”它们):
+- `defaults.dart` 与 `clamp.dart` 是从 `ParamsModel.m` 誊写的;当 `.h` 注释与 `.m` 不一致时,**以 `.m` 为准**(已就地标注)。
+- 部分参数需经专用方法做多字段原子 push:`pushHorizonLock`(9 个参数;锁关闭时 amount 强制为 0)、`pushVideoSpeed`、`pushBackgroundColor`、`pushAdaptiveZoom`(croppingMode→adaptive_zoom 映射 0→0.0 / 1→sec / 2→-1.0)。
+- `pushAllDefaultsAndRecompute()` 由控制器在 `createStabilizer` 后调用一次,push 每个 FFI 支撑的值后直接重算(绕过防抖)。
+- `ParamsModel` 只依赖抽象接口 `EngineBridge`(`lib/src/state/engine_bridge.dart`),故测试可注入 `FakeEngineBridge`。真实的 `EngineBridgeImpl` 1:1 转发到生成的 `EngineApi`。
 
-### Lifecycle when opening a video (`EditController.openAndStart`)
+### 打开视频时的生命周期(`EditController.openAndStart`)
 
-`pickVideo` (native picker channel) → `createStabilizer` → `openVideo` → `setStabEnabled(true)` (the stab toggle is **not** a panel param; the controller must enable it explicitly, mirroring `ViewController`) → `setGyroOffset(48.0)` (raw-IMU device default, replaced by autosync later) → `pushAllDefaultsAndRecompute` → fetch recording-settings/lens metadata → start preview backend.
+`pickVideo`(原生选择器 channel)→ `createStabilizer` → `openVideo` → `setStabEnabled(true)`(防抖开关**不是**面板参数;控制器必须显式开启,对齐 `ViewController`)→ `_autoMatchLensIfNeeded`(视频自带镜头档案缺失时,按检测到的相机 + 视频 WxH 匹配内置镜头档案)→ `setOutputSizeExact` 把预览降采样到 ≤1080p → `pushAllDefaultsAndRecompute` → 拉取录制参数/镜头/陀螺元数据 + 时间线 → 启动预览后端 → 按条件跑 autosync。控制器**不 push `gyro_offset`**(对齐 `ParamsModel.m`:从不写 stabilizer 的偏移);raw-IMU + 有镜头档案的视频由 autosync 求得逐点偏移,在 `autosync_finish` 内部应用。
 
-### Preview backends
+### 预览后端
 
-Two interchangeable backends share one engine stabilizer (`example/lib/edit/preview_backend.dart`): `texture` (Flutter `Texture(textureId)` composited) and `platformView` (native MTKView/SurfaceView embedded via `UiKitView`/PlatformView). Switching backends re-decodes but leaves parameter state untouched.
+`texture`(Flutter `Texture(textureId)`,迁移终态)在**两端**都已实现;`platformView`(经 `UiKitView` 内嵌原生 `MTKView`)是 **iOS 专属**的 go/no-go 对照后端——Android 上隐藏该切换按钮,Texture 是唯一后端。切换后端会重新解码,但参数状态不变。
 
-## Migration status & references
+两端走到零拷贝 Texture 的方式不同:iOS 的纹理 API 是**拉取式**(`FlutterTexture.copyPixelBuffer`),所以 `PreviewController.mm` 维护一个 3 张、IOSurface 背书的 `CVPixelBuffer` 池。Android 的 `TextureRegistry.SurfaceProducer` 是**推送式**——`nativePreviewSurfaceCreated(surface,…)` 让 wgpu 把稳定输出直接渲进该 producer 的 `Surface`,故无缓冲池、无新 GPU 代码(只是 `PreviewController.kt` 里的 Kotlin 胶水)。
 
-`docs/flutter-ui-migration.md` is the master plan (steps 0/1/3/4; step 2 — a `dart:ffi` unified engine — is intentionally skipped). Per-slice design + plan docs live in `docs/superpowers/{specs,plans}/`. When implementing a slice, read its design doc first; it lists the exact native files being ported and the field-by-field checklist against `ParamsModel.h`/`GyroflowNative.kt`.
+## 迁移状态与参考
+
+`docs/flutter-ui-migration.md` 是总规划(步骤 0/1/3/4;步骤 2 —— 一个 `dart:ffi` 统一引擎 —— 有意跳过)。各切片的设计 + 计划文档在 `docs/superpowers/{specs,plans}/`。实现某切片前先读它的设计文档;里面列出了被移植的确切原生文件,以及对照 `ParamsModel.h`/`GyroflowNative.kt` 的逐字段核对表。

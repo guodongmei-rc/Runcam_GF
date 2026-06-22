@@ -248,6 +248,21 @@ class _InputPanelState extends State<InputPanel> {
         ),
       );
 
+  // 镜头档案分辨率与视频不符的橙色警告框(文案/样式对齐桌面 Gyroflow)。
+  Widget _lensMismatchBox() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0A030), // 橙色警告底(对齐官方 InfoMessageSmall warning)
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          '镜头配置文件的尺寸与当前文件不符。结果看起来可能会不正确。',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Color(0xFF1A1A1A), fontSize: 12, height: 1.4),
+        ),
+      );
+
   // ---- 镜头配置文件 ----
   List<Widget> _lensProfile() => [
         _title('镜头配置文件'),
@@ -288,21 +303,13 @@ class _InputPanelState extends State<InputPanel> {
                   style: const TextStyle(color: GfColors.accent, fontSize: 13)),
             ),
           ),
+        // 镜头档案分辨率与视频不符 → 橙色警告(对齐桌面 Gyroflow InfoMessageSmall)。
+        if (c.lensDimsMismatch) ...[
+          const SizedBox(height: 10),
+          _lensMismatchBox(),
+        ],
         const SizedBox(height: 10),
-        // 当前镜头名很长 → 标签在上、名字整行换行。
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('当前镜头',
-                  style: TextStyle(color: GfColors.textSecondary, fontSize: 14)),
-              const SizedBox(height: 4),
-              Text(c.lensName,
-                  style: const TextStyle(color: GfColors.text, fontSize: 14)),
-            ],
-          ),
-        ),
+        // (「当前镜头」标题 + 镜头名已按需求去掉,直接显示镜头信息行。)
         for (final e in c.lensInfo.entries) _row(e.key, e.value),
         // 镜头配置文件「打开文件 / 创建新的」按钮后续再做,先去掉。
         const SizedBox(height: 18),

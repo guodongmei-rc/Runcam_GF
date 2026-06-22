@@ -44,6 +44,7 @@ class VideoInfo {
   String? audioCodec; // 如 "AAC"(无音频轨=空)
   int? audioSampleRate; // 如 48000(Hz;无音频轨=空)
   int? rotationDeg; // 0/90/180/270
+  int? videoBitrate; // 源视频码率(bit/s);默认导出比特率 = 此值/1024/1024(对齐官方)。取不到=空
 }
 
 /// recompute 后的只读输出(供 UI 显示最大修正角 / zoom% = 100/minFov)。

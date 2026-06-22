@@ -401,6 +401,21 @@ class EditController extends ChangeNotifier {
   // 高级镜头档案(可编辑,数据来自 getLensInfoFull,对齐原生「高级」段)。
   double? lensFx, lensFy, lensCx, lensCy; // 像素焦距 fx/fy、聚焦中心 cx/cy
   List<double?> lensDistortion = const []; // 畸变系数 k1..k4
+  int? lensCalibW, lensCalibH; // 镜头标定分辨率(判定是否与视频匹配)
+
+  /// 已加载镜头档案的标定分辨率与当前视频分辨率不一致(对齐桌面 Gyroflow:加载了与视频
+  /// 分辨率不符的镜头档案时,提示"结果看起来可能会不正确")。自动匹配按视频分辨率选档案,
+  /// 故此提示只在加载了"错档案"(如给 GoPro 视频加载 RunCam 档案)时出现。
+  bool get lensDimsMismatch {
+    final vw = videoInfo?.width, vh = videoInfo?.height;
+    final lw = lensCalibW, lh = lensCalibH;
+    return hasLensProfile &&
+        vw != null &&
+        vh != null &&
+        lw != null &&
+        lh != null &&
+        (lw != vw || lh != vh);
+  }
   bool underwaterLens = false; // 水下镜头(暂不接引擎,纯本地偏好)
   int lensLoadSeq = 0; // 每次加载镜头自增;面板据此回填输入框(不覆盖用户编辑)
 
@@ -492,6 +507,12 @@ class EditController extends ChangeNotifier {
       await _bridge.createStabilizer();
       final info = await _bridge.openVideo(picked);
       videoInfo = info; // 提前置好,供 _fetchGyroInfo 按视频时长选积分方法
+      // 默认导出比特率 = 源视频码率 / 1024 / 1024(对齐官方 VideoInformation.qml:76);
+      // 取不到则保留模型默认。新视频每次按源码率重置。
+      final srcBitrate = info.videoBitrate ?? 0;
+      if (srcBitrate > 0) {
+        params.exportBitrateMbps = (srcBitrate / 1024 / 1024).round();
+      }
       await _bridge.setStabEnabled(true);
       // 镜头库自动匹配(对齐 ViewController.mm:1798):视频无内嵌镜头档案时,用检测到的
       // 相机名查内置库、按视频实际分辨率筛子档案加载;否则缺 optimal_fov 会让 FOV 偏大
@@ -612,13 +633,11 @@ class EditController extends ChangeNotifier {
     _pvChannel = MethodChannel('runcam_gf/preview_pv_$id');
   }
 
-  /// 文件名(uri 末段,可能是 content:// 或文件路径)。
+  /// 文件名(uri 末段,可能是 content:// 或文件路径)。只保留纯文件名,不含目录/卷标。
   String? get videoName {
     final u = uri;
     if (u == null) return null;
-    final seg = Uri.tryParse(u)?.pathSegments;
-    if (seg != null && seg.isNotEmpty && seg.last.isNotEmpty) return seg.last;
-    return u.split('/').last;
+    return _lastSegment(u);
   }
 
   // 打开视频时(默认平滑、非0)锁存的「有陀螺数据」结论。之后关防抖(平滑=0)会让
@@ -834,8 +853,10 @@ class EditController extends ChangeNotifier {
       // 全部同步参数(max_sync_points/every_nth_frame/time_per_syncpoint… 决定同步点数与处理帧数,
       // 对齐官方,随镜头档案而定)。读到则覆盖官方默认。
       final sync = j['sync_settings'];
+      // do_autosync 永远显式重置:镜头档案没有「自动同步」内容(无 sync_settings 或 do_autosync≠true)
+      // 时绝不触发自动同步(对齐 iOS:仅声明 do_autosync 的档案才自动同步,否则等用户手动点)。
+      lensDoAutosync = sync is Map && sync['do_autosync'] == true;
       if (sync is Map) {
-        lensDoAutosync = sync['do_autosync'] == true;
         num? n(String k) => sync[k] is num ? sync[k] as num : null;
         bool? b(String k) => sync[k] is bool ? sync[k] as bool : null;
         // 写进 ParamsModel 同步组(面板与 autosync 共享;未指定的键保持默认/现值)。
@@ -876,6 +897,8 @@ class EditController extends ChangeNotifier {
       detectedLens = s('lens') ?? s('lens_model');
       lensName = s('name') ?? s('identifier') ?? '未加载镜头档案';
       final cd = j['calib_dimension'];
+      lensCalibW = (cd is Map && cd['w'] is num) ? (cd['w'] as num).toInt() : null;
+      lensCalibH = (cd is Map && cd['h'] is num) ? (cd['h'] as num).toInt() : null;
       final dim = (cd is Map && cd['w'] != null && cd['h'] != null)
           ? '${cd['w']}×${cd['h']}'
           : null;
@@ -1004,11 +1027,15 @@ class EditController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 取 uri/path 末段文件名。
+  /// 取 uri/path 的纯文件名(去掉目录与卷标前缀)。
+  /// 安卓 content:// 的末段常是 SAF document-id,解码后形如 "primary:DCIM/Camera/VID_001.mp4",
+  /// 需再切掉 ':' 与 '/' 之前的部分,只留 "VID_001.mp4"(对齐「文件名称只显示文件名」)。
   String _lastSegment(String p) {
     final seg = Uri.tryParse(p)?.pathSegments;
-    if (seg != null && seg.isNotEmpty && seg.last.isNotEmpty) return seg.last;
-    return p.split('/').last;
+    final last = (seg != null && seg.isNotEmpty && seg.last.isNotEmpty)
+        ? seg.last
+        : p.split('/').last;
+    return last.split(RegExp(r'[/:]')).last;
   }
 
   /// 取扩展名大写(无扩展名或 content:// 取不到时返回空)。

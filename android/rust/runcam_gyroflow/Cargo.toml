@@ -27,6 +27,6 @@ nalgebra = "0.34"                                        # set_background_color 
 ndk = { version = "0.9.0", features = ["api-level-26"] } # ANativeWindow::from_surface
 pollster = "0.4"                                         # block_on(adapter/device 请求)
 
-# 只读引用 gyroflow 源码(留在 Downloads)。开 use-opencv —— autosync 用 OpenCV(DIS 光流 +
-# findEssentialMat),链官方预编译 OpenCV Android SDK(见 scripts/build_gyroflow_android.sh 的 OPENCV_* 环境变量)。
-gyroflow-core = { path = "/Users/gdm/Downloads/gyroflow-master5.6ios/src/core", features = ["use-opencv"] }
+# 只读引用 gyroflow 源码(在桌面 Gyroflow_fork)。开 use-opencv —— autosync 用 OpenCV(DIS 光流 +
+# findEssentialMat),链官方预编译 OpenCV Android SDK(见 build_gyroflow_android.sh 的 OPENCV_* 环境变量)。
+gyroflow-core = { path = "/Users/gdm/Desktop/Gyroflow_fork/src/core", features = ["use-opencv"] }

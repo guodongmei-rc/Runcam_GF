@@ -46,8 +46,21 @@ object GyroflowNative {
     external fun nativeSetSmoothingMethod(index: Int): Int
     /** 平滑参数: smoothness/per_axis/trim_range_only/max_smoothness/alpha_0_1s/smoothness_pitch|yaw|roll。 */
     external fun nativeSetSmoothingParam(name: String, value: Double): Int
-    /** 锁定地平线(amount %, 0=关; roll = Roll 角度校正 °)。 */
-    external fun nativeSetHorizonLock(amount: Double, roll: Double): Int
+    /**
+     * 锁定地平线(全 9 参,对齐 iOS gyroflow_set_horizon_lock):amount %(0=关)、roll 校正°、
+     * 锁定俯仰 + pitch°、自动锁定 + 转向阈值 / 转向平滑 ms / 转向倍数 / 倾斜加速限制。
+     */
+    external fun nativeSetHorizonLock(
+        amount: Double,
+        roll: Double,
+        lockPitch: Boolean,
+        pitch: Double,
+        automatic: Boolean,
+        turnThreshold: Double,
+        turnSmoothing: Double,
+        turnMultiplier: Double,
+        tiltAccelLimit: Double,
+    ): Int
     /** 缩放速度(自适应缩放窗口, 秒)。 */
     external fun nativeSetAdaptiveZoom(window: Double): Int
     /** 缩放限额(%)+ 迭代次数。 */

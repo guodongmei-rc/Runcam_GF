@@ -11,7 +11,7 @@ use gyroflow_core::stabilization::{KernelParams, COEFFS};
 use wgpu::util::DeviceExt;
 
 const UNDISTORT_WGSL: &str =
-    include_str!("/Users/gdm/Downloads/gyroflow-master5.6ios/src/core/gpu/wgpu_undistort.wgsl");
+    include_str!("/Users/gdm/Desktop/Gyroflow_fork/src/core/gpu/wgpu_undistort.wgsl");
 
 /// 按镜头畸变模型构建 WGSL(替换 LENS_MODEL_FUNCTIONS / SCALAR, 删 buffer_input 块, 保留 texture 路径)。
 fn build_kernel(distortion_name: &str) -> String {

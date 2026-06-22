@@ -1,0 +1,4 @@
+# Rust 构建产物,不入库
+/target
+# 构建脚本临时生成的 NDK clang 包装器
+.ndk-clang-wrap

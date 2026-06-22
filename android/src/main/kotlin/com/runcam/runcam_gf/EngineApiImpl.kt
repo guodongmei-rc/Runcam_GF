@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
  * 说明 / 已知差异(impl 内归一,见 ~/Desktop/迁移步骤/阶段0+2-执行步骤.md S1 核对表):
  *   - Android 引擎是 .so 内单例,无显式 new/free;createStabilizer 只确保 nativeInit 一次。
  *   - 各 setter 在 native 内已即时应用并重算;recomputeBlocking 仅读回 nativeGetStabInfo。
- *   - setHorizonLock:JNI 目前仅 (amount, roll) 两参,advanced 7 参暂不接(留空)。
+ *   - setHorizonLock:JNI 已扩到全 9 参(锁定俯仰/自动锁定/转向阈值·平滑·倍数/倾斜加速限制),对齐 iOS。
  *   - openVideo:nativeOpenVideo 返回状态串而非结构体;此处只填 output size,
  *     其余字段留 null(结构化解析留后续)。
  *   - getFovAtTimestamp:JNI 无按 ts 查询,返回当前帧 fov(忽略 timestamp)。
@@ -54,7 +54,10 @@ class EngineApiImpl(
             val ok = status != null && !status.contains("FAIL", true) &&
                 !status.contains("✗") && !status.contains("error", true)
             // 在工作线程读音视频信息(MediaExtractor 阻塞);失败时各字段为 null。
-            val av = if (ok) readAvInfo(uriOrPath) else AvInfo(null, null, null, null)
+            val av = if (ok) readAvInfo(uriOrPath) else AvInfo(null, null, null, null, null)
+            // 源尺寸/帧率/帧数/时长:取引擎权威值(对齐 iOS 用 GyroflowVideoInfo,而非 MediaExtractor),
+            // 同时保证 width×height 与镜头库自动匹配用的尺寸一致。
+            val meta = if (ok) parseOpenStatus(status!!) else OpenMeta(null, null, null, null, null)
             main.post {
                 if (!ok) {
                     callback(Result.failure(FlutterError("LOAD_VIDEO_FAILED", status ?: "null", null)))
@@ -62,16 +65,47 @@ class EngineApiImpl(
                 }
                 val out = runCatching { GyroflowNative.nativeGetOutputSize() }.getOrNull()
                 callback(Result.success(VideoInfo(
+                    width = meta.width,
+                    height = meta.height,
                     outputWidth = out?.getOrNull(0)?.toLong(),
                     outputHeight = out?.getOrNull(1)?.toLong(),
+                    fps = meta.fps,
+                    durationS = meta.durationS,
+                    frameCount = meta.frameCount,
                     // 音视频信息(Android 原生读取);pixelFormat 留 null。失败时各字段保持 null,不影响 openVideo 成功。
                     videoCodec = av.videoCodec,
                     audioCodec = av.audioCodec,
                     audioSampleRate = av.audioSampleRate,
                     rotationDeg = av.rotationDeg,
+                    videoBitrate = av.videoBitrate,
                 )))
             }
         }
+    }
+
+    /** 从 nativeOpenVideo 状态串解析出的视频元数据(对齐 iOS 引擎值)。 */
+    private data class OpenMeta(
+        val width: Long?,
+        val height: Long?,
+        val fps: Double?,
+        val durationS: Double?,
+        val frameCount: Long?,
+    )
+
+    /**
+     * 解析 nativeOpenVideo 的成功状态串(stab.rs):
+     *   "opened {w}x{h}->{ow}x{oh} fps={:.3} frames={fc} gyro=... lens=... ..."
+     * 取源尺寸/帧率/帧数;时长按 frames/fps 估算(对齐 Dart `_endUs` 的帧数/帧率口径)。
+     * 任一项缺失则留 null(Dart 显示「---」),不影响打开。
+     */
+    private fun parseOpenStatus(status: String): OpenMeta {
+        val wh = Regex("""opened (\d+)x(\d+)""").find(status)?.groupValues
+        val w = wh?.getOrNull(1)?.toLongOrNull()
+        val h = wh?.getOrNull(2)?.toLongOrNull()
+        val fps = Regex("""fps=([\d.]+)""").find(status)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+        val frames = Regex("""frames=(\d+)""").find(status)?.groupValues?.getOrNull(1)?.toLongOrNull()
+        val durationS = if (fps != null && fps > 0.0 && frames != null) frames / fps else null
+        return OpenMeta(w, h, fps, durationS, frames)
     }
 
     /** openVideo 成功后读到的音视频信息(用 MediaExtractor,失败字段留 null)。 */
@@ -80,6 +114,7 @@ class EngineApiImpl(
         val audioCodec: String?,
         val audioSampleRate: Long?,
         val rotationDeg: Long?,
+        val videoBitrate: Long?,
     )
 
     /**
@@ -91,6 +126,7 @@ class EngineApiImpl(
         var audioCodec: String? = null
         var audioSampleRate: Long? = null
         var rotationDeg: Long? = null
+        var videoBitrate: Long? = null
         val extractor = MediaExtractor()
         try {
             if (uriOrPath.startsWith("content://") || uriOrPath.startsWith("file://")) {
@@ -104,8 +140,13 @@ class EngineApiImpl(
                 when {
                     mime.startsWith("video/") && videoCodec == null -> {
                         videoCodec = mapVideoCodec(mime)
+                        // 有视频轨即给出旋转角:无 KEY_ROTATION 时取 0(对齐 iOS 显示「0°」而非「---」)。
                         rotationDeg = runCatching {
-                            if (fmt.containsKey(MediaFormat.KEY_ROTATION)) fmt.getInteger(MediaFormat.KEY_ROTATION).toLong() else null
+                            if (fmt.containsKey(MediaFormat.KEY_ROTATION)) fmt.getInteger(MediaFormat.KEY_ROTATION).toLong() else 0L
+                        }.getOrNull() ?: 0L
+                        // 源视频码率(bit/s),对齐官方默认导出比特率 = 此值/1024/1024。
+                        videoBitrate = runCatching {
+                            if (fmt.containsKey(MediaFormat.KEY_BIT_RATE)) fmt.getInteger(MediaFormat.KEY_BIT_RATE).toLong() else null
                         }.getOrNull()
                     }
                     mime.startsWith("audio/") && audioCodec == null -> {
@@ -121,7 +162,24 @@ class EngineApiImpl(
         } finally {
             runCatching { extractor.release() }
         }
-        return AvInfo(videoCodec, audioCodec, audioSampleRate, rotationDeg)
+        // MediaExtractor 轨道格式很多视频不带 KEY_BIT_RATE → 用 MediaMetadataRetriever 兜底
+        // (METADATA_KEY_BITRATE 是整体码率,近似视频码率;对齐官方默认导出比特率 = 码率/1024/1024)。
+        if (videoBitrate == null) {
+            videoBitrate = runCatching {
+                val mmr = android.media.MediaMetadataRetriever()
+                try {
+                    if (uriOrPath.startsWith("content://") || uriOrPath.startsWith("file://")) {
+                        mmr.setDataSource(appContext, Uri.parse(uriOrPath))
+                    } else {
+                        mmr.setDataSource(uriOrPath)
+                    }
+                    mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
+                } finally {
+                    runCatching { mmr.release() }
+                }
+            }.getOrNull()
+        }
+        return AvInfo(videoCodec, audioCodec, audioSampleRate, rotationDeg, videoBitrate)
     }
 
     private fun mapVideoCodec(mime: String): String = when (mime.lowercase()) {
@@ -156,8 +214,11 @@ class EngineApiImpl(
         automaticLock: Boolean, turnThreshold: Double, turnSmoothingMs: Double,
         turnMultiplier: Double, tiltAccelLimit: Double,
     ) {
-        // JNI 仅两参;advanced(lockPitch/automaticLock/turn*/tilt*)暂未接通。
-        GyroflowNative.nativeSetHorizonLock(lockPercent, rollDeg)
+        // 全 9 参透传(对齐 iOS):地平线锁定的「锁定俯仰/自动锁定/转向阈值·平滑·倍数/倾斜加速限制」高级项。
+        GyroflowNative.nativeSetHorizonLock(
+            lockPercent, rollDeg, lockPitch, pitchDeg,
+            automaticLock, turnThreshold, turnSmoothingMs, turnMultiplier, tiltAccelLimit,
+        )
     }
 
     // MARK: - 缩放
@@ -206,7 +267,24 @@ class EngineApiImpl(
 
     override fun lensSearch(query: String): String = GyroflowNative.nativeLensSearch(query) ?: "[]"
     override fun loadLens(uriOrIdOrJson: String): String = GyroflowNative.nativeLoadLens(uriOrIdOrJson) ?: "{\"ok\":false}"
-    override fun getLensInfoFull(): String = GyroflowNative.nativeGetLensInfo() ?: "{}"
+
+    /**
+     * 取镜头档案完整信息。安卓 nativeGetLensInfo 不含 sync_settings(那是独立的
+     * nativeGetSyncSettings),但 Dart 的 _fetchLensInfo 期望 sync_settings **内嵌**在此(对齐 iOS)——
+     * 否则 lensDoAutosync 恒为 false,打开需自动同步的视频时 autosync 永不触发(陀螺与画面不对齐 →
+     * 预览"看起来没防抖")。故此处把 nativeGetSyncSettings 合并进来,补齐与 iOS 一致的契约。
+     */
+    override fun getLensInfoFull(): String {
+        val lensJson = GyroflowNative.nativeGetLensInfo() ?: "{}"
+        return try {
+            val obj = org.json.JSONObject(lensJson)
+            val sync = org.json.JSONObject(GyroflowNative.nativeGetSyncSettings() ?: "{}")
+            if (sync.length() > 0) obj.put("sync_settings", sync)
+            obj.toString()
+        } catch (_: Throwable) {
+            lensJson // 解析失败:退回原始镜头信息(不阻断打开)
+        }
+    }
     override fun loadGyro(uriOrPath: String, loadAllMetadata: Boolean): String =
         GyroflowNative.nativeLoadGyro(uriOrPath, loadAllMetadata) ?: "{\"ok\":false}"
     override fun getGyroInfo(): String = GyroflowNative.nativeGetGyroInfo() ?: "{}"
@@ -222,13 +300,15 @@ class EngineApiImpl(
         worker.execute {
             // Android 各 setter 已即时重算;此处只读回稳定信息。
             val a = runCatching { GyroflowNative.nativeGetStabInfo() }.getOrNull()
-            val zoomPercent = a?.getOrNull(3) ?: 0.0
+            // nativeGetStabInfo[3] = get_min_fov()*100(min_fov 的百分数,≤100),不是 max zoom%。
+            // minFov 必须与 iOS(gyroflow_get_min_fov,≤1)同义:此处 /100 还原,而非取倒数。
+            // 之前误当 max zoom% 取 100/它 → 得到的是 1/min_fov(倒数),导致最大缩放%/HUD/导出尺寸全反。
+            val minFovPercent = a?.getOrNull(3) ?: 0.0
             val info = StabInfo(
                 maxAnglePitch = a?.getOrNull(0) ?: 0.0,
                 maxAngleYaw = a?.getOrNull(1) ?: 0.0,
                 maxAngleRoll = a?.getOrNull(2) ?: 0.0,
-                // iOS 用 minFov;Android 给的是 max zoom%。zoom% = 100/minFov ⇒ minFov = 100/zoom%。
-                minFov = if (zoomPercent > 0.0) 100.0 / zoomPercent else 0.0,
+                minFov = if (minFovPercent > 0.0) minFovPercent / 100.0 else 0.0,
             )
             main.post {
                 events.onRecomputeFinished(info) {}
