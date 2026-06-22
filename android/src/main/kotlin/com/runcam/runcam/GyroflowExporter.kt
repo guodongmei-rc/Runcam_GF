@@ -51,6 +51,7 @@ class GyroflowExporter(
     companion object {
         private const val TAG = "GyroflowExport"
         private const val TIMEOUT_US = 10_000L
+        private const val QUEUE_CAPACITY = 3 // 流水线队列(控内存:高分辨率 I420 单帧大)
 
         /**
          * 目标位置(所选目录或相册)查重后的最终文件名(对齐官方 App.qml:738-748
@@ -190,9 +191,7 @@ class GyroflowExporter(
         var audioTrack = -1
         var muxerStarted = false
 
-        val bufInfo = MediaCodec.BufferInfo()
-        var inputDone = false
-        var decodeDone = false
+        val bufInfo = MediaCodec.BufferInfo() // 编码器输出,仅消费者(本)线程用
         var encodeDone = false
 
         fun drainEncoder(endOfStream: Boolean) {
@@ -223,87 +222,113 @@ class GyroflowExporter(
             }
         }
 
-        // 分段计时累加器(定位导出耗时分布)
-        var tPack = 0L; var tRender = 0L; var tFeed = 0L; var tFrames = 0L
         // 进度统计: 起始时间 + 总帧数(对齐官方浮层的 帧数/fps/耗时/剩余)
         val startNs = System.nanoTime()
         val totalFrames = if (durationUs > 0) Math.round(durationUs / 1e6 * fps).toInt() else 0
 
-        // 解码 → 稳定 → 编码 主循环(最快速度, 不按实时节流)
-        while (!encodeDone) {
-            if (cancelled) throw RuntimeException("已取消")
+        // ── 双线程流水线:生产者(解码+打包+稳定+回读)→ 有界队列 → 消费者(本线程:编码+封装)──
+        // 让"每帧 GPU 回读阻塞"与"上一帧编码"重叠;引擎(nativeRenderFrameI420)只在生产者单线程调用,
+        // 编码器/muxer 只在消费者线程,互不共享。取消/出错/EOS 经 原子量 + 哨兵 + 带超时入/出队,无死锁。
+        class EncFrame(val i420: ByteArray, val ptsUs: Long, val eos: Boolean)
+        val queue = java.util.concurrent.ArrayBlockingQueue<EncFrame>(QUEUE_CAPACITY)
+        val producerError = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+        val consumerStopped = java.util.concurrent.atomic.AtomicBoolean(false)
+        val MS = java.util.concurrent.TimeUnit.MILLISECONDS
 
-            // 喂解码器输入
-            if (!inputDone) {
-                val inIdx = decoder.dequeueInputBuffer(TIMEOUT_US)
-                if (inIdx >= 0) {
-                    val ib = decoder.getInputBuffer(inIdx)!!
-                    val sz = vExtractor.readSampleData(ib, 0)
-                    if (sz < 0) {
-                        decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        inputDone = true
-                    } else {
-                        decoder.queueInputBuffer(inIdx, 0, sz, vExtractor.sampleTime, 0)
-                        vExtractor.advance()
-                    }
-                }
-            }
-
-            // 取解码输出帧 → 稳定 → 编码
-            if (!decodeDone) {
-                val outIdx = decoder.dequeueOutputBuffer(bufInfo, TIMEOUT_US)
-                if (outIdx >= 0) {
-                    val eos = bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    if (bufInfo.size > 0) {
-                        val image = decoder.getOutputImage(outIdx)
-                        if (image != null) {
-                            val t0 = System.nanoTime()
-                            val f = YuvPacker.pack(image)
-                            image.close()
-                            val t1 = System.nanoTime()
-                            val ptsUs = bufInfo.presentationTimeUs
-                            val i420 = GyroflowNative.nativeRenderFrameI420(f.y, f.u, f.v, f.width, f.height, ptsUs)
-                            val t2 = System.nanoTime()
-                            if (i420.isNotEmpty()) {
-                                feedEncoder(encoder, i420, outW, outH, ptsUs) { drainEncoder(false) }
+        val producer = Thread {
+            val decInfo = MediaCodec.BufferInfo()
+            var inputDone = false
+            var decodeDone = false
+            var tRender = 0L; var tFrames = 0L
+            try {
+                while (!decodeDone) {
+                    if (cancelled) throw RuntimeException("已取消")
+                    if (!inputDone) {
+                        val inIdx = decoder.dequeueInputBuffer(TIMEOUT_US)
+                        if (inIdx >= 0) {
+                            val ib = decoder.getInputBuffer(inIdx)!!
+                            val sz = vExtractor.readSampleData(ib, 0)
+                            if (sz < 0) {
+                                decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                decoder.queueInputBuffer(inIdx, 0, sz, vExtractor.sampleTime, 0)
+                                vExtractor.advance()
                             }
-                            val t3 = System.nanoTime()
-                            // 分段计时(累计平均, 每 60 帧打一行)→ 定位真正的耗时段
-                            tPack += t1 - t0; tRender += t2 - t1; tFeed += t3 - t2; tFrames++
-                            if (tFrames % 60 == 0L) {
-                                Log.d(TAG, "export avg ms/帧: pack=%.1f render(native:稳定+回读)=%.1f feed(编码)=%.1f"
-                                    .format(tPack / tFrames / 1e6, tRender / tFrames / 1e6, tFeed / tFrames / 1e6))
-                            }
-                            // 进度统计(帧数/导出fps/耗时/剩余)→ 浮层显示
-                            val elapsed = (System.nanoTime() - startNs) / 1e9f
-                            val efps = if (elapsed > 0f) tFrames / elapsed else 0f
-                            val pct = when {
-                                totalFrames > 0 -> tFrames.toFloat() / totalFrames
-                                durationUs > 0 -> ptsUs.toFloat() / durationUs
-                                else -> 0f
-                            }.coerceIn(0f, 1f)
-                            val remain = if (efps > 0f && totalFrames > 0) ((totalFrames - tFrames) / efps).coerceAtLeast(0f) else 0f
-                            onProgress(Progress(tFrames.toInt(), totalFrames, efps, elapsed, remain, pct))
                         }
                     }
-                    decoder.releaseOutputBuffer(outIdx, false)
-                    if (eos) decodeDone = true
+                    val outIdx = decoder.dequeueOutputBuffer(decInfo, TIMEOUT_US)
+                    if (outIdx >= 0) {
+                        val eos = decInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        if (decInfo.size > 0) {
+                            val image = decoder.getOutputImage(outIdx)
+                            if (image != null) {
+                                val f = YuvPacker.pack(image)
+                                image.close()
+                                val ptsUs = decInfo.presentationTimeUs
+                                val t1 = System.nanoTime()
+                                val i420 = GyroflowNative.nativeRenderFrameI420(f.y, f.u, f.v, f.width, f.height, ptsUs)
+                                tRender += System.nanoTime() - t1
+                                if (i420.isNotEmpty()) {
+                                    while (!queue.offer(EncFrame(i420, ptsUs, false), 50, MS)) {
+                                        if (cancelled || consumerStopped.get()) throw RuntimeException("已取消")
+                                    }
+                                    tFrames++
+                                    if (tFrames % 60 == 0L) {
+                                        Log.d(TAG, "export avg ms/帧: render(稳定+回读)=%.1f (编码已并行)".format(tRender / tFrames / 1e6))
+                                    }
+                                    val elapsed = (System.nanoTime() - startNs) / 1e9f
+                                    val efps = if (elapsed > 0f) tFrames / elapsed else 0f
+                                    val pct = when {
+                                        totalFrames > 0 -> tFrames.toFloat() / totalFrames
+                                        durationUs > 0 -> ptsUs.toFloat() / durationUs
+                                        else -> 0f
+                                    }.coerceIn(0f, 1f)
+                                    val remain = if (efps > 0f && totalFrames > 0) ((totalFrames - tFrames) / efps).coerceAtLeast(0f) else 0f
+                                    onProgress(Progress(tFrames.toInt(), totalFrames, efps, elapsed, remain, pct))
+                                }
+                            }
+                        }
+                        decoder.releaseOutputBuffer(outIdx, false)
+                        if (eos) decodeDone = true
+                    }
                 }
-            }
-
-            // ByteBuffer 输入的编码器: 解码结束后送一个 EOS 输入包并排空到结束
-            if (decodeDone) {
-                val inIdx = encoder.dequeueInputBuffer(TIMEOUT_US)
-                if (inIdx >= 0) {
-                    encoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                    drainEncoder(true)
-                } else {
-                    drainEncoder(false) // 暂无输入 buffer, 先排空输出避免死锁
-                }
-            } else {
-                drainEncoder(false)
+            } catch (t: Throwable) {
+                producerError.set(t)
+            } finally {
+                runCatching { queue.offer(EncFrame(ByteArray(0), 0, true), 300, MS) } // EOS 哨兵
             }
         }
+        producer.start()
+
+        // 消费者(本线程):取 I420 → 编码 → 封装
+        try {
+            while (!encodeDone) {
+                if (cancelled) throw RuntimeException("已取消")
+                producerError.get()?.let { throw it }
+                val fr = queue.poll(50, MS) ?: continue
+                if (fr.eos) {
+                    var sent = false
+                    while (!encodeDone) {
+                        if (!sent) {
+                            val inIdx = encoder.dequeueInputBuffer(TIMEOUT_US)
+                            if (inIdx >= 0) {
+                                encoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                sent = true
+                            }
+                        }
+                        drainEncoder(sent)
+                    }
+                    break
+                }
+                feedEncoder(encoder, fr.i420, outW, outH, fr.ptsUs) { drainEncoder(false) }
+                drainEncoder(false)
+            }
+        } finally {
+            consumerStopped.set(true)
+            producer.join(3000)
+        }
+        producerError.get()?.let { throw it }
 
         // 音频透传: 把源音频压缩样本复制进 muxer
         if (aExtractor != null && audioTrack >= 0 && muxerStarted) {

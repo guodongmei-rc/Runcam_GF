@@ -291,6 +291,10 @@ struct PreviewState {
     yuv_conv: Option<YuvConverter>,
     y_tex: Option<(u32, u32, wgpu::Texture)>,   // 亮度平面 R8(全分辨率)
     uv_tex: Option<(u32, u32, wgpu::Texture)>,  // 色度平面 RG8(半分辨率)
+    // 导出回读的 MAP_READ 暂存缓冲:按 (行距, 行数) 缓存复用,尺寸变才重建。
+    // 避免每帧重新分配 host-visible 缓冲(移动端慢 + GC churn,回读耗时随帧上涨的根因)。
+    readback_y_buf: Option<(u32, u32, wgpu::Buffer)>,
+    readback_uv_buf: Option<(u32, u32, wgpu::Buffer)>,
 }
 // 预览调用均来自 Activity 的回调(单线程)。NativeWindow 非 Send,这里手动声明。
 unsafe impl Send for PreviewState {}
@@ -349,6 +353,7 @@ fn setup(window: ndk::native_window::NativeWindow, width: u32, height: u32) -> R
         yuv, frame: None, rgba, rgba_frame: None,
         undistort: None, in_tex: None, out_tex: None,
         yuv_conv: None, y_tex: None, uv_tex: None,
+        readback_y_buf: None, readback_uv_buf: None,
     })
 }
 
@@ -669,6 +674,21 @@ pub(crate) fn readback_output_i420() -> Option<(u32, u32, Vec<u8>)> {
     ensure_tex(&mut state.y_tex, &state.device, tw, th, wgpu::TextureFormat::R8Unorm, "y_tex");
     ensure_tex(&mut state.uv_tex, &state.device, cw, ch, wgpu::TextureFormat::Rg8Unorm, "uv_tex");
 
+    // 回读暂存缓冲:按 (行距, 行数) 缓存复用,尺寸变才重建(避免每帧分配 host-visible 缓冲)。
+    // 须在下面取 conv/views(持 state 不可变借用)之前做这次可变写入。
+    let y_pad = align256(tw);        // R8: 1 字节/像素
+    let uv_pad = align256(cw * 2);   // RG8: 2 字节/像素
+    if state.readback_y_buf.as_ref().map(|b| b.0 != y_pad || b.1 != th).unwrap_or(true) {
+        state.readback_y_buf = Some((y_pad, th, state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("y-read"), size: (y_pad as u64) * (th as u64),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false })));
+    }
+    if state.readback_uv_buf.as_ref().map(|b| b.0 != uv_pad || b.1 != ch).unwrap_or(true) {
+        state.readback_uv_buf = Some((uv_pad, ch, state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("uv-read"), size: (uv_pad as u64) * (ch as u64),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false })));
+    }
+
     let conv = state.yuv_conv.as_ref().unwrap();
     let out_view = state.out_tex.as_ref().unwrap().2.create_view(&wgpu::TextureViewDescriptor::default());
     let y_view = state.y_tex.as_ref().unwrap().2.create_view(&wgpu::TextureViewDescriptor::default());
@@ -681,10 +701,9 @@ pub(crate) fn readback_output_i420() -> Option<(u32, u32, Vec<u8>)> {
         ],
     });
 
-    let y_pad = align256(tw);        // R8: 1 字节/像素
-    let uv_pad = align256(cw * 2);   // RG8: 2 字节/像素
-    let y_buf = state.device.create_buffer(&wgpu::BufferDescriptor { label: Some("y-read"), size: (y_pad as u64) * (th as u64), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    let uv_buf = state.device.create_buffer(&wgpu::BufferDescriptor { label: Some("uv-read"), size: (uv_pad as u64) * (ch as u64), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    // 复用上面缓存的回读缓冲(不再每帧分配)。
+    let y_buf = &state.readback_y_buf.as_ref().unwrap().2;
+    let uv_buf = &state.readback_uv_buf.as_ref().unwrap().2;
 
     let mut enc = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("yuv-conv-enc") });
     {
