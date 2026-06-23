@@ -245,7 +245,8 @@ class _ExportPanelState extends State<ExportPanel> {
     _refillIfNeeded();
     final children = _content(context);
     // 嵌入(宽屏右栏 / 参数页末尾,跟随外层 ListView 一起滚)→ Column;否则自带 ListView。
-    Widget body = widget.embedded
+    // 「无视频时显示但不可操作」由调用方统一用 _disabledIfNoVideo 包裹处理(避免重复变暗)。
+    return widget.embedded
         ? Padding(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
             child: Column(
@@ -259,11 +260,6 @@ class _ExportPanelState extends State<ExportPanel> {
               children: children,
             ),
           );
-    // 没有视频时:内容照常显示(对齐稳定/同步模块),但整体不可操作(拦截点击 + 轻微变暗)。
-    if (c.uri == null) {
-      body = IgnorePointer(child: Opacity(opacity: 0.5, child: body));
-    }
-    return body;
   }
 
   List<Widget> _content(BuildContext context) {

@@ -363,8 +363,8 @@ class _PreviewPageState extends State<PreviewPage>
                 ),
               ),
               const VerticalDivider(width: 1, color: GfColors.border),
-              // 右栏:参数模块(稳定 → 同步 → 导出,整列一起滚动)。
-              Expanded(flex: 1, child: _paramsPanel()),
+              // 右栏:参数模块(稳定 → 同步 → 导出,整列一起滚动);无视频时显示但不可操作。
+              Expanded(flex: 1, child: _disabledIfNoVideo(_paramsPanel())),
             ],
           ),
         ),
@@ -562,19 +562,20 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
+  // 未导入视频时:内容照常显示但整体不可操作(拦截点击 + 变暗)。
+  Widget _disabledIfNoVideo(Widget child) => _c.uri == null
+      ? IgnorePointer(child: Opacity(opacity: 0.5, child: child))
+      : child;
+
   Widget _tabContent() {
     switch (_tab) {
       case 0:
-        return InputPanel(controller: _c);
+        return InputPanel(controller: _c); // 「输入」需可操作(要选视频),不禁用
       case 1:
-        // 「参数」Tab:稳定 + 同步;未载入视频先给提示。
-        return _c.uri == null
-            ? Center(
-                child: Text(context.l10n.prevSelectVideoHint,
-                    style: const TextStyle(color: GfColors.textSecondary)))
-            : _paramsTab();
+        // 「参数」Tab:稳定 + 同步;无视频时显示但不可操作。
+        return _disabledIfNoVideo(_paramsTab());
       default:
-        return ExportPanel(controller: _c); // 「导出」Tab
+        return _disabledIfNoVideo(ExportPanel(controller: _c)); // 「导出」Tab
     }
   }
 }
