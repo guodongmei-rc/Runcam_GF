@@ -192,16 +192,16 @@ class _PreviewPageState extends State<PreviewPage>
         ),
       );
 
-  // 参数模块:稳定 → 同步 → 导出,整列一起滚动(导出接在稳定模块下方,不单独成 Tab)。
+  // 参数模块整列(同一滚动):同步(顶,对齐官方 同步→稳定)→ 稳定 → 导出(稳定模块下方)。
   // 供窄屏「参数」Tab 与宽屏右栏复用。
   Widget _paramsPanel() => StabilizePanel(
         model: _c.params,
-        trailing: Column(
+        trailing: SyncPanel(controller: _c), // 同步模块:置于稳定之上
+        footer: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SyncPanel(controller: _c), // 同步模块
             const Divider(height: 22, color: GfColors.border),
-            // 导出模块:嵌入(不自带滚动)→ 跟随上面的参数列表一起滚到底。
+            // 导出模块:嵌入(不自带滚动)→ 接在稳定模块下方,跟随整列一起滚到底。
             ExportPanel(controller: _c, embedded: true),
           ],
         ),

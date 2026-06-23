@@ -10,10 +10,16 @@ import '../gyroflow_theme.dart';
 /// 只通过 [model] 调参,不引用任何预览后端。平滑度/锁定量以 0–100% 显示、内部 0–1。
 class StabilizePanel extends StatefulWidget {
   const StabilizePanel(
-      {super.key, required this.model, this.trailing, this.loadedValues});
+      {super.key,
+      required this.model,
+      this.trailing,
+      this.footer,
+      this.loadedValues});
   final ParamsModel model;
-  /// 追加到面板末尾(同一滚动内),用于在「参数」下方放同步模块。
+  /// 置于稳定参数「之上」(同一滚动内),用于放同步模块(对齐官方 同步→稳定 顺序)。
   final Widget? trailing;
+  /// 追加到面板「末尾」(同一滚动内),用于在稳定模块下方放导出模块。
+  final Widget? footer;
   /// 「加载镜头(及覆盖)后的参数值」快照(原始模型单位):双击行标题恢复到这些值。
   final Map<String, double>? loadedValues;
   @override
@@ -258,6 +264,8 @@ class _StabilizePanelState extends State<StabilizePanel> {
                       'maxZoomIterations', (v) => m.maxZoomIterations = v.round()),
                 ),
             ],
+            // 末尾:导出模块(在稳定模块下方,同一滚动内)。
+            if (widget.footer != null) widget.footer!,
           ],
         );
         },
