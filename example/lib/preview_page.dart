@@ -69,14 +69,26 @@ class _PreviewPageState extends State<PreviewPage>
   Widget _bodyColumn() {
     return Column(
           children: [
-            // 顶栏:仅关闭按钮(顶部信息框与「切到 PlatformView」按需求去掉)。
+            // 顶栏:返回按钮 + 居中标题「Gyroflow」。
             Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.close, color: GfColors.text),
+                  icon: const Icon(Icons.arrow_back_ios, color: GfColors.unselectedBottomBarColor),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                const Spacer(),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Gyroflow',
+                      style: TextStyle(
+                        color: GfColors.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 48), // 平衡左侧返回按钮宽度,使标题真正居中
               ],
             ),
             // 预览区。

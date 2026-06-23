@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 class GfColors {
   static const accent = Color(0xFFFF8000); // 主题色(橙)
   static const text = Colors.white;
+  static const unselectedBottomBarColor = Colors.white70;
   static const textSecondary = Color(0xFF999999);
   static const textMuted = Color(0xFFBFBFBF);
   static const bg = Colors.black; // 根背景 / 预览
