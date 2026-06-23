@@ -36,6 +36,12 @@ class _PreviewPageState extends State<PreviewPage>
 
   void _onChange() => setState(() {});
 
+  // 点页面任意空白处:收键盘 + 收起镜头检索结果列表。
+  void _dismissLensOverlay() {
+    FocusScope.of(context).unfocus();
+    _c.clearLensResults();
+  }
+
   @override
   void dispose() {
     _c.removeListener(_onChange);
@@ -55,10 +61,15 @@ class _PreviewPageState extends State<PreviewPage>
       body: Stack(
         children: [
           // 宽屏(iPad 横屏)走三栏布局,窄屏(手机/竖屏)走原 Tab 布局。
+          // 包一层 GestureDetector:点页面任意空白处即收键盘 + 收起镜头检索列表(子控件照常响应)。
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, c) =>
-                  c.maxWidth >= _kWideBreakpoint ? _wideBody() : _bodyColumn(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissLensOverlay,
+              child: LayoutBuilder(
+                builder: (context, c) =>
+                    c.maxWidth >= _kWideBreakpoint ? _wideBody() : _bodyColumn(),
+              ),
             ),
           ),
           // 加载视频蒙版(转圈)。

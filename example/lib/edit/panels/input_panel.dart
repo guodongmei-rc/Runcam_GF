@@ -23,7 +23,8 @@ class _InputPanelState extends State<InputPanel> {
   late final TextEditingController _imu =
       TextEditingController(text: widget.controller.imuOrientation);
   final TextEditingController _lensQuery = TextEditingController();
-  List<Map<String, String>> _lensResults = const [];
+  // 搜索框焦点:tap-outside 收键盘(对齐「同步搜索尺寸」数值框的交互)。
+  final FocusNode _lensFocus = FocusNode();
   bool _searching = false;
   Timer? _lensSearchDebounce; // 边输入边搜的防抖
 
@@ -63,6 +64,7 @@ class _InputPanelState extends State<InputPanel> {
     _lensSearchDebounce?.cancel();
     _imu.dispose();
     _lensQuery.dispose();
+    _lensFocus.dispose();
     for (final t in [
       _fx, _fy, _cx, _cy, _d0, _d1, _d2, _d3, //
       _lpfHz, _frameOffset, _medianSamples, //
@@ -95,30 +97,24 @@ class _InputPanelState extends State<InputPanel> {
     setState(() => _searching = true);
     final r = await c.searchLens(q);
     if (!mounted) return;
-    setState(() {
-      _lensResults = r;
-      _searching = false;
-    });
+    c.setLensResults(r); // 结果提到控制器,便于页面任意处收起
+    setState(() => _searching = false);
   }
 
   /// 点键盘「完成」:取消待执行搜索、收起键盘、收起搜索结果列表。
   void _onLensSearchDone(String _) {
     _lensSearchDebounce?.cancel();
-    FocusScope.of(context).unfocus(); // 收起键盘
-    setState(() {
-      _lensResults = const []; // 收起搜索列表
-      _searching = false;
-    });
+    _lensFocus.unfocus(); // 收起键盘
+    c.clearLensResults(); // 收起搜索列表
+    setState(() => _searching = false);
   }
 
   /// 边输入边搜(防抖 300ms,对齐桌面 fork 的 live SearchField);清空则立即清结果。
   void _onLensQueryChanged(String q) {
     _lensSearchDebounce?.cancel();
     if (q.trim().isEmpty) {
-      setState(() {
-        _lensResults = const [];
-        _searching = false;
-      });
+      c.clearLensResults();
+      setState(() => _searching = false);
       return;
     }
     _lensSearchDebounce =
@@ -128,29 +124,13 @@ class _InputPanelState extends State<InputPanel> {
   Future<void> _pickLens(String id) async {
     await c.loadLens(id);
     if (!mounted) return;
-    setState(() {
-      _lensResults = const [];
-      _lensQuery.clear();
-    });
-  }
-
-  /// 点击空白处:① 若键盘还开着 → 先收起键盘(保留搜索结果列表);
-  /// ② 键盘已收起且有搜索结果 → 收起结果列表。
-  void _onBlankTap() {
-    final focus = FocusScope.of(context);
-    if (focus.hasFocus) {
-      focus.unfocus(); // 第一次:收起键盘,列表保留
-    } else if (_lensResults.isNotEmpty) {
-      setState(() => _lensResults = const []); // 第二次:收起检索列表
-    }
+    c.clearLensResults();
+    _lensQuery.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent, // 空白处可点;子控件(搜索框/结果/滑块)照常响应
-      onTap: _onBlankTap,
-      child: Container(
+    return Container(
       color: GfColors.bgPanel,
       child: AnimatedBuilder(
         animation: c,
@@ -188,7 +168,6 @@ class _InputPanelState extends State<InputPanel> {
             ],
           );
         },
-      ),
       ),
     );
   }
@@ -303,7 +282,7 @@ class _InputPanelState extends State<InputPanel> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final r in _lensResults)
+                for (final r in c.lensResults)
                   InkWell(
                     onTap: () => _pickLens(r['id']!),
                     child: Padding(
@@ -327,6 +306,9 @@ class _InputPanelState extends State<InputPanel> {
         // 搜索框(回车搜索内置镜头库)。
         TextField(
           controller: _lensQuery,
+          focusNode: _lensFocus,
+          // 点击输入框外的任意位置即收起键盘(对齐「同步搜索尺寸」数值框交互)。
+          onTapOutside: (_) => _lensFocus.unfocus(),
           enabled: c.uri != null,
           style: const TextStyle(color: GfColors.text, fontSize: 14),
           textInputAction: TextInputAction.done, // 键盘右下角显示「完成」
@@ -352,7 +334,7 @@ class _InputPanelState extends State<InputPanel> {
         ),
         const SizedBox(height: 10),
         // 有检索结果:列表直接显示在输入框下方,盖住「打开文件」按钮;无结果时显示按钮。
-        if (_lensResults.isNotEmpty)
+        if (c.lensResults.isNotEmpty)
           _lensResultsList()
         else
           // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
