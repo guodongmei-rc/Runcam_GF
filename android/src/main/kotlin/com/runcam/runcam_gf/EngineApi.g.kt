@@ -179,7 +179,9 @@ data class ExportRequest (
   val bitrateMbps: Long? = null,
   val exportAudio: Boolean? = null,
   val width: Long? = null,
-  val height: Long? = null
+  val height: Long? = null,
+  val trimStartUs: Long? = null,
+  val trimEndUs: Long? = null
 )
  {
   companion object {
@@ -192,7 +194,9 @@ data class ExportRequest (
       val exportAudio = pigeonVar_list[5] as Boolean?
       val width = pigeonVar_list[6] as Long?
       val height = pigeonVar_list[7] as Long?
-      return ExportRequest(srcUri, outputUri, fileName, codecIndex, bitrateMbps, exportAudio, width, height)
+      val trimStartUs = pigeonVar_list[8] as Long?
+      val trimEndUs = pigeonVar_list[9] as Long?
+      return ExportRequest(srcUri, outputUri, fileName, codecIndex, bitrateMbps, exportAudio, width, height, trimStartUs, trimEndUs)
     }
   }
   fun toList(): List<Any?> {
@@ -205,6 +209,8 @@ data class ExportRequest (
       exportAudio,
       width,
       height,
+      trimStartUs,
+      trimEndUs,
     )
   }
 }

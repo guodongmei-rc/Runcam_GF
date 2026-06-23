@@ -20,6 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 同步执行导出(请在后台队列调用)。progress 在调用线程回调(0..1, frame, total)。
 /// 返回 nil = 成功;否则错误。
+/// trimStartUs/trimEndUs:导出裁剪区间(µs;0 表示从头/到结尾)。仅渲染该段,
+/// 视频/音频输出 PTS 以裁剪起点 rebase 到 ~0(reader.timeRange + startSessionAtSourceTime)。
 - (NSError *_Nullable)exportFromURL:(NSURL *)srcURL
                               toURL:(NSURL *)dstURL
                          codecIndex:(int)codecIndex
@@ -27,8 +29,10 @@ NS_ASSUME_NONNULL_BEGIN
                         exportAudio:(BOOL)exportAudio
                               outW:(uint32_t)outW
                               outH:(uint32_t)outH
+                        trimStartUs:(int64_t)trimStartUs
+                          trimEndUs:(int64_t)trimEndUs
                            progress:(void (^_Nullable)(double p, NSInteger frame, NSInteger total))progressBlock
-    NS_SWIFT_NAME(export(fromURL:toURL:codecIndex:bitrateMbps:exportAudio:outW:outH:progress:));
+    NS_SWIFT_NAME(export(fromURL:toURL:codecIndex:bitrateMbps:exportAudio:outW:outH:trimStartUs:trimEndUs:progress:));
 
 @end
 

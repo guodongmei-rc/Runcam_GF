@@ -187,6 +187,8 @@ class ExportRequest {
     this.exportAudio,
     this.width,
     this.height,
+    this.trimStartUs,
+    this.trimEndUs,
   });
 
   String? srcUri;
@@ -205,6 +207,10 @@ class ExportRequest {
 
   int? height;
 
+  int? trimStartUs;
+
+  int? trimEndUs;
+
   Object encode() {
     return <Object?>[
       srcUri,
@@ -215,6 +221,8 @@ class ExportRequest {
       exportAudio,
       width,
       height,
+      trimStartUs,
+      trimEndUs,
     ];
   }
 
@@ -229,6 +237,8 @@ class ExportRequest {
       exportAudio: result[5] as bool?,
       width: result[6] as int?,
       height: result[7] as int?,
+      trimStartUs: result[8] as int?,
+      trimEndUs: result[9] as int?,
     );
   }
 }

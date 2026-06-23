@@ -214,6 +214,8 @@ struct ExportRequest {
   var exportAudio: Bool? = nil
   var width: Int64? = nil
   var height: Int64? = nil
+  var trimStartUs: Int64? = nil
+  var trimEndUs: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -226,6 +228,8 @@ struct ExportRequest {
     let exportAudio: Bool? = nilOrValue(pigeonVar_list[5])
     let width: Int64? = nilOrValue(pigeonVar_list[6])
     let height: Int64? = nilOrValue(pigeonVar_list[7])
+    let trimStartUs: Int64? = nilOrValue(pigeonVar_list[8])
+    let trimEndUs: Int64? = nilOrValue(pigeonVar_list[9])
 
     return ExportRequest(
       srcUri: srcUri,
@@ -235,7 +239,9 @@ struct ExportRequest {
       bitrateMbps: bitrateMbps,
       exportAudio: exportAudio,
       width: width,
-      height: height
+      height: height,
+      trimStartUs: trimStartUs,
+      trimEndUs: trimEndUs
     )
   }
   func toList() -> [Any?] {
@@ -248,6 +254,8 @@ struct ExportRequest {
       exportAudio,
       width,
       height,
+      trimStartUs,
+      trimEndUs,
     ]
   }
 }

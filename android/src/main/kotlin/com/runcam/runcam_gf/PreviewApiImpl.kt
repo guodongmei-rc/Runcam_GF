@@ -75,6 +75,8 @@ class PreviewApiImpl(
             exportAudio = req.exportAudio ?: true,
             fileName = req.fileName ?: "",
             exportDirUri = if (outUri.isEmpty()) null else outUri,
+            trimStartUs = req.trimStartUs ?: 0L,
+            trimEndUs = req.trimEndUs ?: 0L,
         )
         val ex = GyroflowExporter(context, toUri(src))
         exporter = ex

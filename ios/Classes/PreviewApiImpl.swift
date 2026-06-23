@@ -104,7 +104,9 @@ final class PreviewApiImpl: NSObject, PreviewApi {
                            bitrateMbps: Int32(req.bitrateMbps ?? 0),
                            exportAudio: req.exportAudio ?? true,
                            outW: UInt32(max(0, req.width ?? 0)),
-                           outH: UInt32(max(0, req.height ?? 0))) { p, frame, total in
+                           outH: UInt32(max(0, req.height ?? 0)),
+                           trimStartUs: req.trimStartUs ?? 0,
+                           trimEndUs: req.trimEndUs ?? 0) { p, frame, total in
         DispatchQueue.main.async {
           ev?.onExportProgress(progress: p, frame: Int64(frame), total: Int64(total)) { _ in }
         }

@@ -23,6 +23,8 @@
   "prevExporting": "导出中 {pct}%... ({frame}/{total} @ {fps}fps)",
   "prevCancel": "取消",
   "prevSelectVideoHint": "选视频后可调参",
+  "prevTrimStart": "设裁剪起点",
+  "prevTrimEnd": "设裁剪终点",
 
   "pvStatusInitial": "点「选视频」开始",
   "pvStatusNativeDirect": "原生直出 (PlatformView) · out={size}",

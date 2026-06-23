@@ -116,6 +116,12 @@ class _PreviewPageState extends State<PreviewPage>
                 syncPoints: _c.autosyncSyncPoints,
                 durationMs: (_c.videoInfo?.durationS ?? 0) * 1000,
                 onSeek: (p) => _c.seekToProgress(p),
+                // 裁剪区间:手柄拖动按时长换算成 µs 回写控制器(导出仅渲染该段)。
+                trimStart: _c.trimStartFrac,
+                trimEnd: _c.trimEndFrac,
+                onTrimStart: (p) =>
+                    _c.setTrimStartUs((p * _durationUs).round()),
+                onTrimEnd: (p) => _c.setTrimEndUs((p * _durationUs).round()),
               ),
             ],
             // 预览控制按钮行:播放 / 切换稳定概览 / 防抖 / 背景模式(对齐官方预览控制)。
@@ -156,6 +162,22 @@ class _PreviewPageState extends State<PreviewPage>
                               _toast(context.l10n.prevEnableOverviewHint);
                             }
                           },
+                  ),
+                  const SizedBox(width: 8),
+                  // 裁剪起点 [ :把当前播放头设为导出区间起点(对齐桌面 trim-in)。
+                  _ctrlBtn(
+                    icon: Icons.align_horizontal_left,
+                    label: context.l10n.prevTrimStart,
+                    active: _c.isTrimmed,
+                    onTap: _c.uri == null ? null : _c.setTrimStartToPlayhead,
+                  ),
+                  const SizedBox(width: 8),
+                  // 裁剪终点 ] :把当前播放头设为导出区间终点(对齐桌面 trim-out)。
+                  _ctrlBtn(
+                    icon: Icons.align_horizontal_right,
+                    label: context.l10n.prevTrimEnd,
+                    active: _c.isTrimmed,
+                    onTap: _c.uri == null ? null : _c.setTrimEndToPlayhead,
                   ),
                 ],
               ),
@@ -235,6 +257,9 @@ class _PreviewPageState extends State<PreviewPage>
         behavior: SnackBarBehavior.floating,
       ));
   }
+
+  // 视频总时长(µs),供裁剪手柄 frac↔µs 换算(与播放头/时间线同基准)。
+  double get _durationUs => (_c.videoInfo?.durationS ?? 0) * 1e6;
 
   // 陀螺波形播放头进度(Dart 播放头 / 时长)。
   double _gyroProgress() {

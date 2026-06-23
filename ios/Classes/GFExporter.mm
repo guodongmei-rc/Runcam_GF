@@ -36,6 +36,8 @@ static NSError *gfErr(NSInteger code, NSString *msg) {
                exportAudio:(BOOL)exportAudio
                      outW:(uint32_t)outWIn
                      outH:(uint32_t)outHIn
+                trimStartUs:(int64_t)trimStartUs
+                  trimEndUs:(int64_t)trimEndUs
                   progress:(void (^)(double, NSInteger, NSInteger))progressBlock {
   if (_stab == NULL) return gfErr(2, @"stabilizer 未就绪");
   if (_device == nil || _queue == nil) return gfErr(3, @"Metal 不可用");
@@ -204,9 +206,25 @@ static NSError *gfErr(NSInteger code, NSString *msg) {
   CVMetalTextureCacheCreate(kCFAllocatorDefault, NULL, _device, NULL, &texCache);
   if (texCache == NULL) return gfErr(7, @"创建 MTLTextureCache 失败");
 
+  // ===== 裁剪区间(µs→CMTime):仅导出 [trimStart, trimEnd] =====
+  // reader.timeRange 让两个 reader 只产出区间内样本并自动起停;startSessionAtSourceTime:startT
+  // 把「源时间 startT」映射为输出时间 0 → 视频(原始 pts append)与音频(透传)PTS 一致 rebase 到 ~0。
+  const double assetDurSec = CMTimeGetSeconds(asset.duration);
+  const int64_t trimStartUsC = trimStartUs > 0 ? trimStartUs : 0;
+  const BOOL hasEndTrim = (trimEndUs > 0) && (assetDurSec <= 0 || (double)trimEndUs / 1.0e6 < assetDurSec);
+  const CMTime trimStartT = CMTimeMake(trimStartUsC, 1000000);
+  const CMTime trimDurT = hasEndTrim ? CMTimeMake(trimEndUs - trimStartUsC, 1000000) : kCMPositiveInfinity;
+  const double trimStartSec = (double)trimStartUsC / 1.0e6;
+  const double trimEndSec = hasEndTrim ? (double)trimEndUs / 1.0e6 : assetDurSec;
+  const double effDurSec = (trimEndSec > trimStartSec) ? (trimEndSec - trimStartSec) : assetDurSec;
+  if (trimStartUsC > 0 || hasEndTrim) {
+    reader.timeRange = CMTimeRangeMake(trimStartT, trimDurT);
+    if (aReader) aReader.timeRange = CMTimeRangeMake(trimStartT, trimDurT);
+  }
+
   if (![reader startReading]) { CFRelease(texCache); return reader.error ?: gfErr(8, @"reader 启动失败"); }
   if (![writer startWriting]) { CFRelease(texCache); return writer.error ?: gfErr(9, @"writer 启动失败"); }
-  [writer startSessionAtSourceTime:kCMTimeZero];
+  [writer startSessionAtSourceTime:trimStartT]; // 全片时 trimStartT=0,等价 kCMTimeZero
   NSLog(@"[GFExport] step5 session started, entering frame loop");
 
   // 音频:回调式异步写入(AVFoundation 自行按节奏拉音频,writer 内部交错,不死锁)。
@@ -229,7 +247,7 @@ static NSError *gfErr(NSInteger code, NSString *msg) {
     }
   }
 
-  const double durationSec = CMTimeGetSeconds(asset.duration);
+  const double durationSec = effDurSec; // 进度按裁剪后时长(全片时 == 资源时长)
   const float fps = vTrack.nominalFrameRate;
   const NSInteger totalFrames = (fps > 0 && durationSec > 0) ? (NSInteger)llround((double)fps * durationSec) : 0;
   double lastReported = 0.0;
@@ -325,8 +343,8 @@ static NSError *gfErr(NSInteger code, NSString *msg) {
 
       frameIdx++;
       if (durationSec > 0) {
-        double p = CMTimeGetSeconds(pts) / durationSec;
-        if (p - lastReported > 0.01) { lastReported = p; if (progressBlock) progressBlock(MIN(p, 0.99), frameIdx, totalFrames); }
+        double p = (CMTimeGetSeconds(pts) - trimStartSec) / durationSec; // pts 以裁剪起点为基准
+        if (p - lastReported > 0.01) { lastReported = p; if (progressBlock) progressBlock(MIN(MAX(p, 0.0), 0.99), frameIdx, totalFrames); }
       }
     }
   }

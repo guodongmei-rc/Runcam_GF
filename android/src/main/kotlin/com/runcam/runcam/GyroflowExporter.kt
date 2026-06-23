@@ -36,6 +36,8 @@ class GyroflowExporter(
         val exportAudio: Boolean,
         val fileName: String = "",       // 输出文件名(导出面板「输出路径」; 空白用时间戳兜底)
         val exportDirUri: String? = null, // 用户选定的导出存储目录(SAF tree uri; null=默认存相册)
+        val trimStartUs: Long = 0L,      // 裁剪起点(µs); 0=从头
+        val trimEndUs: Long = 0L,        // 裁剪终点(µs); 0=到结尾
     )
 
     /** 导出进度统计(对齐官方浮层): 当前帧/总帧、导出速度、已耗时、预计剩余、百分比。 */
@@ -142,6 +144,16 @@ class GyroflowExporter(
         }
         val fps = if (vFormat.containsKey(MediaFormat.KEY_FRAME_RATE)) vFormat.getInteger(MediaFormat.KEY_FRAME_RATE) else 30
 
+        // ── 裁剪区间(µs): 导出仅渲染 [effStart, effEnd] ──
+        // start>0 → seek 到前一个关键帧解码、丢弃起点前帧; end>0 且 <时长 → 越过终点即停。
+        // 输出视频/音频 PTS 都以 effStart 为基准 rebase 到 ~0(A/V 保持同步)。
+        val effStart = s.trimStartUs.coerceAtLeast(0L)
+        val hasEndTrim = s.trimEndUs > 0L && (durationUs <= 0L || s.trimEndUs < durationUs)
+        val effEnd = if (hasEndTrim) s.trimEndUs else Long.MAX_VALUE
+        val trimmed = effStart > 0L || hasEndTrim
+        val endForCount = if (hasEndTrim) s.trimEndUs else durationUs
+        val trimDurUs = (endForCount - effStart).coerceAtLeast(0L)
+
         // 对齐官方: 稳定用夹后尺寸(取景固定, 与预览一致), 回读时 GPU 放大到目标分辨率编码。
         val outW = s.outW and 1.inv()
         val outH = s.outH and 1.inv()
@@ -163,6 +175,8 @@ class GyroflowExporter(
 
         // 解码器
         vExtractor.selectTrack(vTrackIdx)
+        // 裁剪起点: seek 到 ≤effStart 的关键帧(解码须从关键帧起; 区间前的帧在入队时丢弃)。
+        if (effStart > 0L) vExtractor.seekTo(effStart, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         vFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
         val decoder = MediaCodec.createDecoderByType(vFormat.getString(MediaFormat.KEY_MIME)!!)
         decoder.configure(vFormat, null, null, 0)
@@ -224,7 +238,7 @@ class GyroflowExporter(
 
         // 进度统计: 起始时间 + 总帧数(对齐官方浮层的 帧数/fps/耗时/剩余)
         val startNs = System.nanoTime()
-        val totalFrames = if (durationUs > 0) Math.round(durationUs / 1e6 * fps).toInt() else 0
+        val totalFrames = if (trimDurUs > 0) Math.round(trimDurUs / 1e6 * fps).toInt() else 0
 
         // ── 双线程流水线:生产者(解码+打包+稳定+回读)→ 有界队列 → 消费者(本线程:编码+封装)──
         // 让"每帧 GPU 回读阻塞"与"上一帧编码"重叠;引擎(nativeRenderFrameI420)只在生产者单线程调用,
@@ -271,8 +285,9 @@ class GyroflowExporter(
                                 val i420 = GyroflowNative.nativeRenderFrameI420(f.y, f.u, f.v, f.width, f.height, ptsUs)
                                 tRender += System.nanoTime() - t1
                                 // 返回的是上一帧的 I420(滞后一帧)→ 用上一帧的 pts 入队;首帧 i420 为空跳过。
-                                if (i420.isNotEmpty() && prevPts >= 0) {
-                                    while (!queue.offer(EncFrame(i420, prevPts, false), 50, MS)) {
+                                // 裁剪:仅区间内的帧入队(prevPts ∈ [effStart, effEnd]),输出 pts 以 effStart rebase 到 ~0。
+                                if (i420.isNotEmpty() && prevPts >= effStart && prevPts <= effEnd) {
+                                    while (!queue.offer(EncFrame(i420, prevPts - effStart, false), 50, MS)) {
                                         if (cancelled || consumerStopped.get()) throw RuntimeException("已取消")
                                     }
                                     tFrames++
@@ -290,16 +305,18 @@ class GyroflowExporter(
                                     onProgress(Progress(tFrames.toInt(), totalFrames, efps, elapsed, remain, pct))
                                 }
                                 prevPts = ptsUs
+                                // 越过裁剪终点:最后一个区间内帧已入队(滞后一帧),停止解码。
+                                if (trimmed && ptsUs > effEnd) decodeDone = true
                             }
                         }
                         decoder.releaseOutputBuffer(outIdx, false)
                         if (eos) decodeDone = true
                     }
                 }
-                // 排空流水线滞留的最后一帧(用最后一帧的 pts)。
+                // 排空流水线滞留的最后一帧:总要调用 flush 清空引擎内部 lag,但仅区间内才入队(rebase)。
                 val last = GyroflowNative.nativeRenderFlushI420()
-                if (last.isNotEmpty() && prevPts >= 0) {
-                    while (!queue.offer(EncFrame(last, prevPts, false), 50, MS)) {
+                if (last.isNotEmpty() && prevPts >= effStart && prevPts <= effEnd) {
+                    while (!queue.offer(EncFrame(last, prevPts - effStart, false), 50, MS)) {
                         if (cancelled || consumerStopped.get()) throw RuntimeException("已取消")
                     }
                 }
@@ -342,7 +359,7 @@ class GyroflowExporter(
 
         // 音频透传: 把源音频压缩样本复制进 muxer
         if (aExtractor != null && audioTrack >= 0 && muxerStarted) {
-            copyAudio(aExtractor, muxer, audioTrack)
+            copyAudio(aExtractor, muxer, audioTrack, effStart, effEnd)
         }
 
         // 收尾
@@ -411,7 +428,11 @@ class GyroflowExporter(
         }
     }
 
-    private fun copyAudio(extractor: MediaExtractor, muxer: MediaMuxer, track: Int) {
+    // 音频透传(可裁剪): seek 到起点关键帧 → 丢弃起点前样本、越过终点即停 → PTS 以 startUs rebase。
+    private fun copyAudio(
+        extractor: MediaExtractor, muxer: MediaMuxer, track: Int, startUs: Long, endUs: Long,
+    ) {
+        if (startUs > 0L) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
         val maxChunk = 256 * 1024
         val buffer = ByteBuffer.allocate(maxChunk)
         val info = MediaCodec.BufferInfo()
@@ -419,12 +440,16 @@ class GyroflowExporter(
             buffer.clear()
             val sz = extractor.readSampleData(buffer, 0)
             if (sz < 0) break
-            info.offset = 0
-            info.size = sz
-            info.presentationTimeUs = extractor.sampleTime
-            info.flags = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0)
-                MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
-            muxer.writeSampleData(track, buffer, info)
+            val sampleTime = extractor.sampleTime
+            if (sampleTime > endUs) break          // 越过裁剪终点
+            if (sampleTime >= startUs) {           // seek 可能落到更早关键帧 → 丢弃起点前
+                info.offset = 0
+                info.size = sz
+                info.presentationTimeUs = sampleTime - startUs
+                info.flags = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0)
+                    MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                muxer.writeSampleData(track, buffer, info)
+            }
             extractor.advance()
         }
     }

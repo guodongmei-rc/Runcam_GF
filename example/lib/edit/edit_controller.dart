@@ -253,7 +253,7 @@ class EditController extends ChangeNotifier {
     exportRunning = true;
     exportProgressValue = 0.0;
     exportFrame = 0;
-    exportTotal = totalFrames;
+    exportTotal = trimmedFrames; // 裁剪后帧数(全片时 == totalFrames)
     _exportClock
       ..reset()
       ..start();
@@ -283,6 +283,8 @@ class EditController extends ChangeNotifier {
         exportAudio: params.exportAudio,
         width: exportWidth,
         height: exportHeight,
+        trimStartUs: trimStartUs,
+        trimEndUs: trimEndUs,
       ));
       exportRunning = false;
       _exportClock.stop();
@@ -481,6 +483,61 @@ class EditController extends ChangeNotifier {
 
   int get totalFrames => videoInfo?.frameCount ?? 0;
 
+  // ── 裁剪区间(导出仅渲染 [trimStartUs, trimEndUs];默认全片)──
+  // 基准时长(µs):与时间线/播放头一致(progress 0..1 映射到 [0, durationUs])。
+  int get _durationUs => ((videoInfo?.durationS ?? 0) * 1e6).round();
+  int trimStartUs = 0;
+  int? _trimEndUs; // null = 到结尾(= _durationUs);打开新视频时复位
+  int get trimEndUs => _trimEndUs ?? _durationUs;
+  static const int _minTrimGapUs = 100000; // 最小区间 0.1s
+
+  /// 裁剪起点/终点的归一化位置(0..1),供时间线绘制选区与手柄。
+  double get trimStartFrac =>
+      _durationUs > 0 ? (trimStartUs / _durationUs).clamp(0.0, 1.0) : 0.0;
+  double get trimEndFrac =>
+      _durationUs > 0 ? (trimEndUs / _durationUs).clamp(0.0, 1.0) : 1.0;
+
+  /// 是否已裁剪(非全片)——决定导出是否传裁剪区间、UI 是否高亮。
+  bool get isTrimmed =>
+      _durationUs > 0 &&
+      (trimStartUs > 0 || trimEndUs < _durationUs - _minTrimGapUs);
+
+  /// 裁剪后的帧数(导出蒙版进度用;真实总帧由原生回报覆盖)。
+  int get trimmedFrames {
+    final fps = videoInfo?.fps ?? 0;
+    if (fps <= 0) return totalFrames;
+    return ((trimEndUs - trimStartUs).clamp(0, _durationUs) / 1e6 * fps).round();
+  }
+
+  void setTrimStartUs(int us) {
+    final dur = _durationUs;
+    if (dur <= 0) return;
+    final maxStart = (trimEndUs - _minTrimGapUs).clamp(0, dur);
+    trimStartUs = us.clamp(0, maxStart);
+    notifyListeners();
+  }
+
+  void setTrimEndUs(int us) {
+    final dur = _durationUs;
+    if (dur <= 0) return;
+    final minEnd = (trimStartUs + _minTrimGapUs).clamp(0, dur);
+    _trimEndUs = us.clamp(minEnd, dur);
+    notifyListeners();
+  }
+
+  /// 「设裁剪起点 = 当前播放头」(对齐桌面 trim-in `[` 按钮)。
+  void setTrimStartToPlayhead() => setTrimStartUs(_playheadUs);
+
+  /// 「设裁剪终点 = 当前播放头」(对齐桌面 trim-out `]` 按钮)。
+  void setTrimEndToPlayhead() => setTrimEndUs(_playheadUs);
+
+  /// 清除裁剪,恢复全片。
+  void clearTrim() {
+    trimStartUs = 0;
+    _trimEndUs = null;
+    notifyListeners();
+  }
+
   /// 真正最后一帧的时间戳(µs):按帧数/帧率算 = (帧数-1)/fps。比整段 durationS 更准
   /// (durationS 含最后一帧的显示时长,落在末帧之后),用于末尾判定/重播判定,避免停在
   /// 中途帧或 HUD 帧号越界。取不到 fps/帧数时退回 durationS。
@@ -512,6 +569,8 @@ class EditController extends ChangeNotifier {
     _gyroDataDetected = false; // 新视频:重置陀螺检测锁存(下方默认 recompute 后重判)
     exportFileNameOverride = null; // 新视频:导出名回到默认(输入名_stabilized);目录保留(对齐官方)
     autosyncSyncPoints = const []; // 新视频:清旧同步点
+    trimStartUs = 0; // 新视频:裁剪区间复位为全片
+    _trimEndUs = null;
     // 不复位 _folderAuthorized:授权过一次后整个会话不再显示蓝框(对齐用户预期)。
     try {
       await _bridge.createStabilizer();

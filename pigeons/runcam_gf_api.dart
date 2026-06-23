@@ -72,6 +72,8 @@ class ExportRequest {
   bool? exportAudio;
   int? width; // 输出宽(偶数)
   int? height; // 输出高(偶数)
+  int? trimStartUs; // 裁剪起点(µs,从视频开头算);0/缺省=从头导出
+  int? trimEndUs; // 裁剪终点(µs);0/缺省=导到结尾
 }
 
 // ============================================================================

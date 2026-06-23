@@ -224,6 +224,18 @@ abstract class AppLocalizations {
   /// **'Select a video to adjust parameters'**
   String get prevSelectVideoHint;
 
+  /// No description provided for @prevTrimStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Set trim start'**
+  String get prevTrimStart;
+
+  /// No description provided for @prevTrimEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Set trim end'**
+  String get prevTrimEnd;
+
   /// No description provided for @pvStatusInitial.
   ///
   /// In en, this message translates to:
