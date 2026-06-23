@@ -510,8 +510,13 @@ class EditController extends ChangeNotifier {
     return ((trimEndUs - trimStartUs).clamp(0, _durationUs) / 1e6 * fps).round();
   }
 
-  /// 切换裁剪开关:开启时选区默认取「居中、占总长 1/3」;关闭时清空选区(导出整片)。
-  void toggleTrim() {
+  /// 预览/seek 的有效播放区间:裁剪开 → [trimStart, trimEnd];关 → [0, 末帧]。
+  int get _playStartUs => trimEnabled ? trimStartUs : 0;
+  int get _playEndUs => trimEnabled ? trimEndUs : _endUs;
+
+  /// 切换裁剪开关:开启时选区默认取「居中、占总长 1/3」,并把预览跳到选区起点
+  /// (只看选中片段);关闭时清空选区(导出整片)。
+  Future<void> toggleTrim() async {
     trimEnabled = !trimEnabled;
     if (trimEnabled) {
       final dur = _durationUs;
@@ -519,6 +524,12 @@ class EditController extends ChangeNotifier {
         trimStartUs = (dur / 3).round(); // 居中的 1/3:[1/3, 2/3]
         _trimEndUs = (dur * 2 / 3).round();
       }
+      // 进入裁剪:播放头落到选区起点并 seek 预览(预览只放选中片段)。
+      _playheadUs = trimStartUs;
+      _lastElapsedUs = _orientClock.elapsedMicroseconds;
+      await _seekBackend(_playheadUs);
+      if (!playing) _refreshPreview();
+      await _fetchPreviewStateOnce();
     } else {
       trimStartUs = 0;
       _trimEndUs = null;
@@ -688,11 +699,16 @@ class EditController extends ChangeNotifier {
   }
 
   Future<void> togglePlay() async {
-    final atEnd = _endUs > 0 && _playheadUs >= _endUs;
+    final start = _playStartUs, end = _playEndUs;
+    final atEnd = end > 0 && _playheadUs >= end;
+    final outside = trimEnabled && _playheadUs < start; // 裁剪时落在选区之外
     playing = !playing;
-    // 末尾重播:HUD 从 0 起;原生 play() 自带「到尾则 Stopped→Playing 从头」(对齐原生),
-    // 不需要再 seek(0)。
-    if (playing && atEnd) _playheadUs = 0;
+    // 末尾/选区外重播:回到有效起点。整片用原生 play() 自带「到尾从头」无需 seek(0);
+    // 裁剪时起点非 0,须显式 seek 原生到选区起点。
+    if (playing && (atEnd || outside)) {
+      _playheadUs = start;
+      if (trimEnabled) await _seekBackend(_playheadUs);
+    }
     if (backend == PreviewBackend.texture) {
       await (playing ? _previewApi.play() : _previewApi.pause());
     } else {
@@ -1221,22 +1237,29 @@ class EditController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// 拖动陀螺时间线 seek 到进度 p(0..1):更新播放头 + 原生 seek + 重渲/刷 HUD。
-  Future<void> seekToProgress(double p) async {
-    final durUs = ((videoInfo?.durationS ?? 0) * 1e6).round();
-    if (durUs <= 0) return;
-    // 封顶到真正末帧:拖到最右不越过末帧,避免 HUD 帧号越界(total+1)/停在空帧。
-    final endUs = _endUs;
-    _playheadUs = (p.clamp(0.0, 1.0) * durUs).round();
-    if (endUs > 0 && _playheadUs > endUs) _playheadUs = endUs;
-    _lastElapsedUs = _orientClock.elapsedMicroseconds; // 重置时钟基准,避免下拍 dt 跳变
+  /// 后端 seek(Texture/PlatformView 统一入口)。
+  Future<void> _seekBackend(int us) async {
     try {
       if (backend == PreviewBackend.texture) {
-        await _previewApi.seekTo(_playheadUs);
+        await _previewApi.seekTo(us);
       } else {
-        await _pvChannel?.invokeMethod('seekTo', {'us': _playheadUs});
+        await _pvChannel?.invokeMethod('seekTo', {'us': us});
       }
     } catch (_) {/* platformView 暂未接 seek:仅更新播放头/波形 */}
+  }
+
+  /// 拖动陀螺时间线 seek 到进度 p(0..1):更新播放头 + 原生 seek + 重渲/刷 HUD。
+  /// 裁剪开启时只能 seek 到选区内 [trimStart, trimEnd];否则封顶到真正末帧。
+  Future<void> seekToProgress(double p) async {
+    final durUs = _durationUs;
+    if (durUs <= 0) return;
+    final lo = _playStartUs, hi = _playEndUs;
+    var t = (p.clamp(0.0, 1.0) * durUs).round();
+    // 封顶到有效区间:拖到选区/末帧外即夹住,避免 HUD 帧号越界或越出选中片段。
+    if (hi > 0) t = t.clamp(lo, hi);
+    _playheadUs = t;
+    _lastElapsedUs = _orientClock.elapsedMicroseconds; // 重置时钟基准,避免下拍 dt 跳变
+    await _seekBackend(_playheadUs);
     if (!playing) _refreshPreview();
     await _fetchPreviewStateOnce();
     notifyListeners();
@@ -1354,10 +1377,21 @@ class EditController extends ChangeNotifier {
     final nowUs = _orientClock.elapsedMicroseconds;
     final dt = nowUs - _lastElapsedUs;
     _lastElapsedUs = nowUs;
-    final endUs = _endUs;
+    final endUs = _playEndUs;
     _playheadUs += dt;
     if (endUs > 0 && _playheadUs >= endUs) {
-      // 播放到末尾:**不去动原生**——让 MDK 自己播到真 EOF 自然进入 Stopped 态(画面停在末帧)。
+      if (trimEnabled) {
+        // 裁剪播放:到选区终点 → 循环回选区起点继续播放(预览只放选中片段)。
+        _playheadUs = _playStartUs;
+        _orientBusy = true;
+        try {
+          await _seekBackend(_playheadUs);
+        } catch (_) {/* seek 失败:下一拍重试 */}
+        _orientBusy = false;
+        notifyListeners();
+        return;
+      }
+      // 整片:播放到末尾**不去动原生**——让 MDK 自己播到真 EOF 自然进入 Stopped 态(画面停在末帧)。
       // 这里只停 Dart 时钟 + 置暂停态(按钮显示播放)。重播时 play() 从 Stopped set(Playing)
       // 自动从 0 开始(对齐原生 ViewController:1561/636,一次点击即重播)。
       // 若强行 pause/seek 会让 MDK 停在「非 Stopped 的末帧」,重播检测时灵时不灵 → 要点两遍。

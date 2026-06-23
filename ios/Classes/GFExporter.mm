@@ -213,7 +213,7 @@ static NSError *gfErr(NSInteger code, NSString *msg) {
   const int64_t trimStartUsC = trimStartUs > 0 ? trimStartUs : 0;
   const BOOL hasEndTrim = (trimEndUs > 0) && (assetDurSec <= 0 || (double)trimEndUs / 1.0e6 < assetDurSec);
   const CMTime trimStartT = CMTimeMake(trimStartUsC, 1000000);
-  const CMTime trimDurT = hasEndTrim ? CMTimeMake(trimEndUs - trimStartUsC, 1000000) : kCMPositiveInfinity;
+  const CMTime trimDurT = hasEndTrim ? CMTimeMake(trimEndUs - trimStartUsC, 1000000) : kCMTimePositiveInfinity;
   const double trimStartSec = (double)trimStartUsC / 1.0e6;
   const double trimEndSec = hasEndTrim ? (double)trimEndUs / 1.0e6 : assetDurSec;
   const double effDurSec = (trimEndSec > trimStartSec) ? (trimEndSec - trimStartSec) : assetDurSec;
