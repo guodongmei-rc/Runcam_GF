@@ -12,8 +12,10 @@ import '../../l10n/l10n.dart';
 /// 编码器/比特率/GPU/音频 绑 ParamsModel(只存值);输出尺寸绑 EditController.export*(intent,
 /// 不写引擎以免破坏 1080P 预览);高级项为本地状态。导出渲染本身为后续切片。
 class ExportPanel extends StatefulWidget {
-  const ExportPanel({super.key, required this.controller});
+  const ExportPanel({super.key, required this.controller, this.embedded = false});
   final EditController controller;
+  /// 嵌入模式:不自带竖向滚动(返回 Column),供宽屏右栏「参数模块下方」跟随外层一起滚动。
+  final bool embedded;
   @override
   State<ExportPanel> createState() => _ExportPanelState();
 }
@@ -241,20 +243,39 @@ class _ExportPanelState extends State<ExportPanel> {
   @override
   Widget build(BuildContext context) {
     if (c.uri == null) {
-      return Container(
-        color: GfColors.bgPanel,
-        alignment: Alignment.center,
-        child: Text(context.l10n.expSelectVideoHint,
-            style: const TextStyle(color: GfColors.textSecondary)),
-      );
+      final hint = Text(context.l10n.expSelectVideoHint,
+          style: const TextStyle(color: GfColors.textSecondary));
+      // 嵌入模式只占一行提示(不撑满 / 不自带滚动);独立模式仍是整块居中。
+      return widget.embedded
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 12), child: hint)
+          : Container(
+              color: GfColors.bgPanel,
+              alignment: Alignment.center,
+              child: hint);
     }
     _refillIfNeeded();
-    final codec = _codecs[m.exportCodecIndex.clamp(0, _codecs.length - 1)];
+    final children = _content(context);
+    // 嵌入(宽屏右栏,跟随 StabilizePanel 的 ListView 一起滚)→ Column;否则自带 ListView。
+    if (widget.embedded) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+      );
+    }
     return Container(
       color: GfColors.bgPanel,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-        children: [
+        children: children,
+      ),
+    );
+  }
+
+  List<Widget> _content(BuildContext context) {
+    final codec = _codecs[m.exportCodecIndex.clamp(0, _codecs.length - 1)];
+    return [
           Text(context.l10n.expTitle,
               style: const TextStyle(
                   color: GfColors.text,
@@ -382,9 +403,7 @@ class _ExportPanelState extends State<ExportPanel> {
                 ? null
                 : (c.exportRunning ? () => c.cancelExport() : _onExportTap),
           ),
-        ],
-      ),
-    );
+    ];
   }
 
   static bool _foregroundHintShown = false; // 前台提示「不再显示」(会话内)

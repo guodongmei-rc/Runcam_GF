@@ -248,15 +248,21 @@ class _PreviewPageState extends State<PreviewPage>
                 ),
               ),
               const VerticalDivider(width: 1, color: GfColors.border),
-              // 右栏:参数模块(上)+ 导出模块(下)。
+              // 右栏:参数模块(稳定 + 同步),其下接导出模块 —— 整列一起滚动,导出不固定。
               Expanded(
                 flex: 1,
-                child: Column(
-                  children: [
-                    Expanded(flex: 3, child: _paramsPanel()),
-                    const Divider(height: 1, color: GfColors.border),
-                    Expanded(flex: 2, child: ExportPanel(controller: _c)),
-                  ],
+                child: StabilizePanel(
+                  model: _c.params,
+                  trailing: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SyncPanel(controller: _c), // 同步模块
+                      const Divider(height: 22, color: GfColors.border),
+                      // 导出模块:嵌入(不自带滚动)→ 跟随上面的参数列表一起滚到底。
+                      ExportPanel(controller: _c, embedded: true),
+                    ],
+                  ),
+                  loadedValues: _c.loadedParamValues,
                 ),
               ),
             ],
