@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'l10n/l10n.dart';
 import 'edit/edit_controller.dart';
 import 'edit/gyro_widgets.dart';
@@ -165,7 +166,7 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             const SizedBox(width: 8),
             _ctrlBtn(
-              icon: Icons.crop_free,
+              svgAsset: 'assets/icons/fov-overview.svg', // 官方稳定概览图标
               label: context.l10n.prevStabOverview,
               active: _c.fovOverview,
               onTap: _c.uri == null ? null : _c.toggleFovOverview,
@@ -281,7 +282,8 @@ class _PreviewPageState extends State<PreviewPage>
   // 预览控制按钮(只用图标,不放文字):激活=橙底白字,未激活=描边,禁用=灰。
   // [label] 不再可见,仅作无障碍语义(随系统语言本地化)。
   Widget _ctrlBtn(
-      {required IconData icon,
+      {IconData? icon,
+      String? svgAsset, // 自定义 SVG 图标(如官方稳定概览图标),与 icon 二选一
       required String label,
       required bool active,
       required VoidCallback? onTap}) {
@@ -305,7 +307,12 @@ class _PreviewPageState extends State<PreviewPage>
                   color: enabled ? GfColors.accent : GfColors.textSecondary),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 20, color: fg),
+            child: svgAsset != null
+                ? SvgPicture.asset(svgAsset,
+                    width: 20,
+                    height: 20,
+                    colorFilter: ColorFilter.mode(fg, BlendMode.srcIn))
+                : Icon(icon, size: 20, color: fg),
           ),
         ),
       ),
