@@ -1,10 +1,8 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'l10n/l10n.dart';
 import 'edit/edit_controller.dart';
 import 'edit/gyro_widgets.dart';
 import 'edit/gyroflow_theme.dart';
-import 'edit/preview_backend.dart';
 import 'edit/preview_view.dart';
 import 'edit/gyro_timeline_view.dart';
 import 'edit/panels/input_panel.dart';
@@ -71,27 +69,14 @@ class _PreviewPageState extends State<PreviewPage>
   Widget _bodyColumn() {
     return Column(
           children: [
-            // 顶栏:关闭 + 后端状态 + 一键切后端(dev)。
+            // 顶栏:仅关闭按钮(顶部信息框与「切到 PlatformView」按需求去掉)。
             Row(
               children: [
                 IconButton(
                   icon: const Icon(Icons.close, color: GfColors.text),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                Expanded(
-                  child: Text(_c.status,
-                      style: const TextStyle(
-                          color: GfColors.textSecondary, fontSize: 12)),
-                ),
-                // PlatformView 对照后端仅 iOS 实现;安卓只 Texture(对齐设计:
-                // 原生全屏页的 SurfaceView 已是参照),隐藏切换以免触发 iOS-only UiKitView。
-                if (defaultTargetPlatform != TargetPlatform.android)
-                  TextButton(
-                    onPressed: _c.uri == null || _c.busy ? null : _c.switchBackend,
-                    child: Text(context.l10n.prevSwitchTo(_c.backend.other.label),
-                        style: const TextStyle(color: GfColors.accent)),
-                  ),
-                const SizedBox(width: 4),
+                const Spacer(),
               ],
             ),
             // 预览区。
