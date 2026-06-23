@@ -309,7 +309,7 @@ class _PreviewPageState extends State<PreviewPage>
                 const SizedBox(height: 6),
                 _gyroTimeline(height: 42), // 手机横屏:运动数据高度减半
               ],
-              _controlButtons(compact: true), // 按钮高度减半
+              _controlButtons(), // 原始高度
             ],
           ),
         ),
@@ -318,7 +318,7 @@ class _PreviewPageState extends State<PreviewPage>
           flex: 3,
           child: Column(
             children: [
-              _tabBar(compact: true), // 直接顶到最上端 + 高度减半
+              _tabBar(), // 直接顶到最上端,原始高度
               Expanded(child: _tabContent()),
             ],
           ),
