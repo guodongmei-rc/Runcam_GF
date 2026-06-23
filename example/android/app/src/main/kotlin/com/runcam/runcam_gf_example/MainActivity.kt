@@ -36,9 +36,10 @@ class MainActivity : FlutterActivity() {
                     "pickVideo", "pickLensFile", "pickMotionFile" -> {
                         val mime = when (call.method) {
                             "pickVideo" -> "video/*"
-                            // .json,部分机型 application/json 过滤太严,放开
-                            "pickLensFile" -> "*/*"
-                            // .gcsv/.csv/.bbl 无标准 MIME,放开
+                            // 镜头档案:只允许选 .json(选择器按 application/json 过滤;
+                            // 个别机型若某 .json 的 MIME 不被识别可能不显示,仍有 Dart 侧扩展名校验兜底)。
+                            "pickLensFile" -> "application/json"
+                            // .gcsv 无标准 MIME,放开;Dart 侧按扩展名只接受 .gcsv
                             else -> "*/*"
                         }
                         if (pending != null) {
