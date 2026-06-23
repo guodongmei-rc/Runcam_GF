@@ -599,6 +599,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Lens profile aspect ratio doesn\'t match the file aspect ratio. The result will not look correct.';
 
   @override
+  String get inputLensNotLoaded =>
+      'Lens profile is not loaded, the results will not look correct. Please load a lens profile for your camera.';
+
+  @override
   String get inputLensProfile => 'Lens profile';
 
   @override

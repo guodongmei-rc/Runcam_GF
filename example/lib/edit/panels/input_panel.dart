@@ -246,24 +246,22 @@ class _InputPanelState extends State<InputPanel> {
         ),
       );
 
-  // 镜头档案与视频不符提示(对齐桌面 Gyroflow):
-  //   宽高比不符 → 红色 Error(结果将不正确);仅尺寸不同(同比例)→ 橙色 Warning(可能不正确)。
-  Widget _lensMismatchBox(bool isError) => Container(
+  // 镜头提示框(对齐桌面 Gyroflow InfoMessageSmall):error=红底白字(更严重),
+  // warning=橙底深字。用于「未加载镜头」「宽高比不符」「尺寸不符」三种提示。
+  Widget _lensInfoBox(String text, {required bool error}) => Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isError
-              ? const Color(0xFFD9534F) // 红色错误底(宽高比不符)
-              : const Color(0xFFF0A030), // 橙色警告底(仅尺寸不符)
+          color: error
+              ? const Color(0xFFD9534F) // 红色错误底
+              : const Color(0xFFF0A030), // 橙色警告底
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          isError
-              ? context.l10n.inputLensAspectMismatch
-              : context.l10n.inputLensMismatch,
+          text,
           textAlign: TextAlign.center,
           style: TextStyle(
-              color: isError ? Colors.white : const Color(0xFF1A1A1A),
+              color: error ? Colors.white : const Color(0xFF1A1A1A),
               fontSize: 12,
               height: 1.4),
         ),
@@ -347,10 +345,18 @@ class _InputPanelState extends State<InputPanel> {
                   (c.busy || c.uri == null) ? null : c.openLensFile),
             ),
           ),
-        // 镜头档案分辨率与视频不符 → 橙色警告(对齐桌面 Gyroflow InfoMessageSmall)。
-        if (c.lensDimsMismatch) ...[
+        // 镜头提示(对齐桌面 Gyroflow,载入视频后):
+        //   未加载镜头 → 橙色警告(请加载镜头);已加载但宽高比不符 → 红色;仅尺寸不符 → 橙色。
+        if (c.uri != null && !c.hasLensProfile) ...[
           const SizedBox(height: 10),
-          _lensMismatchBox(c.lensAspectMismatch),
+          _lensInfoBox(context.l10n.inputLensNotLoaded, error: false),
+        ] else if (c.lensDimsMismatch) ...[
+          const SizedBox(height: 10),
+          _lensInfoBox(
+              c.lensAspectMismatch
+                  ? context.l10n.inputLensAspectMismatch
+                  : context.l10n.inputLensMismatch,
+              error: c.lensAspectMismatch),
         ],
         const SizedBox(height: 10),
         // (「当前镜头」标题 + 镜头名已按需求去掉,直接显示镜头信息行。)

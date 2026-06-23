@@ -592,6 +592,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get inputLensAspectMismatch => '镜头配置文件的宽高比与当前文件不符。结果看起来可能会不正确。';
 
   @override
+  String get inputLensNotLoaded => '镜头配置文件并未加载,结果看起来可能会不正确。请为您的相机加载镜头配置文件。';
+
+  @override
   String get inputLensProfile => '镜头配置文件';
 
   @override

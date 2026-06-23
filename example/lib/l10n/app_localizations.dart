@@ -1147,6 +1147,12 @@ abstract class AppLocalizations {
   /// **'Lens profile aspect ratio doesn\'t match the file aspect ratio. The result will not look correct.'**
   String get inputLensAspectMismatch;
 
+  /// No description provided for @inputLensNotLoaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Lens profile is not loaded, the results will not look correct. Please load a lens profile for your camera.'**
+  String get inputLensNotLoaded;
+
   /// No description provided for @inputLensProfile.
   ///
   /// In en, this message translates to:
