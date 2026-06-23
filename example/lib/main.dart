@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:runcam_gf/runcam_gf.dart';
+import 'package:toastification/toastification.dart';
 
 import 'l10n/l10n.dart';
+import 'toast.dart';
 import 'preview_page.dart';
 import 'preview_platformview_page.dart';
 
@@ -29,7 +31,8 @@ class MyApp extends StatelessWidget {
       // 每次重建同步全局译文实例,供无 BuildContext 的状态层(EditController 等)读取。
       builder: (context, child) {
         L.current = AppLocalizations.of(context)!;
-        return child ?? const SizedBox.shrink();
+        // ToastificationWrapper:提供吐司专用 overlay(在全局之上显示)。
+        return ToastificationWrapper(child: child ?? const SizedBox.shrink());
       },
       home: const HomePage(),
     );
@@ -65,7 +68,6 @@ class _HomePageState extends State<HomePage> {
   Future<String?> _pickVideoUri() => _pickerChannel.invokeMethod<String>('pickVideo');
 
   Future<void> _runSmoke() async {
-    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
     try {
       final uri = await _pickVideoUri();
@@ -86,12 +88,11 @@ class _HomePageState extends State<HomePage> {
           '${_model.maxAngleYaw.toStringAsFixed(2)}/'
           '${_model.maxAngleRoll.toStringAsFixed(2)}';
       setState(() => _status = msg);
-      messenger.showSnackBar(SnackBar(content: Text(msg)));
+      showAppToast(msg);
     } on PlatformException catch (e) {
-      messenger.showSnackBar(SnackBar(
-          content: Text(l10n.homeSmokeFailedPlatform(e.code, e.message ?? ''))));
+      showAppToast(l10n.homeSmokeFailedPlatform(e.code, e.message ?? ''));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.homeSmokeFailed('$e'))));
+      showAppToast(l10n.homeSmokeFailed('$e'));
     }
   }
 
@@ -105,16 +106,11 @@ class _HomePageState extends State<HomePage> {
           children: [
             ElevatedButton(
               onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
                 final l10n = context.l10n;
                 try {
                   await RuncamGF.open();
                 } on PlatformException catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                        content:
-                            Text(l10n.homeOpenFailed(e.code, e.message ?? ''))),
-                  );
+                  showAppToast(l10n.homeOpenFailed(e.code, e.message ?? ''));
                 }
               },
               child: Text(context.l10n.homeOpenGyroflow),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 
 import 'l10n/l10n.dart';
+import 'toast.dart';
 
 /// 预览 PlatformView (dev):对照 Texture 路。
 ///
@@ -27,7 +28,6 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
   MethodChannel? _pv; // 每个 PlatformView 实例的控制通道
 
   Future<void> _start() async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final uri = await _picker.invokeMethod<String>('pickVideo');
       if (uri == null) return;
@@ -46,9 +46,7 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
         );
       });
     } on PlatformException catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(L.current.pvFailed('${e.code} ${e.message}'))),
-      );
+      showAppToast(L.current.pvFailed('${e.code} ${e.message}'));
     }
   }
 

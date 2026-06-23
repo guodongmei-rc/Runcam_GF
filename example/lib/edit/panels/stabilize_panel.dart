@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 import '../../l10n/l10n.dart';
+import '../../toast.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
 
@@ -283,15 +284,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
     };
   }
 
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars() // 清掉当前/排队的,不堆积
-      ..showSnackBar(SnackBar(
-        content: Text(msg),
-        duration: const Duration(milliseconds: 1200),
-        behavior: SnackBarBehavior.floating,
-      ));
-  }
+  void _toast(String msg) => showAppToast(msg);
 
   // 帧读出方向:行尾小方按钮,箭头随方向旋转([0,180,-90,90]°),点击循环 + toast。
   Widget _readoutDirInline() {

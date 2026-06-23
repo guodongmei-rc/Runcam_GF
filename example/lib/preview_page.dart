@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'l10n/l10n.dart';
+import 'toast.dart';
 import 'edit/edit_controller.dart';
 import 'edit/gyro_widgets.dart';
 import 'edit/gyroflow_theme.dart';
@@ -428,16 +429,8 @@ class _PreviewPageState extends State<PreviewPage>
     }
   }
 
-  // 浮动 toast(清掉旧的不堆积)。
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        content: Text(msg),
-        duration: const Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-      ));
-  }
+  // 浮动 toast(toastification,清掉旧的不堆积)。
+  void _toast(String msg) => showAppToast(msg);
 
   // 视频总时长(µs),供裁剪手柄 frac↔µs 换算(与播放头/时间线同基准)。
   double get _durationUs => (_c.videoInfo?.durationS ?? 0) * 1e6;
