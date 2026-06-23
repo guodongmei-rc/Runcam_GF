@@ -61,15 +61,19 @@ class _PreviewPageState extends State<PreviewPage>
       backgroundColor: GfColors.bg,
       body: Stack(
         children: [
-          // 宽屏(iPad 横屏)走三栏布局,窄屏(手机/竖屏)走原 Tab 布局。
-          // 包一层 GestureDetector:点页面任意空白处即收键盘 + 收起镜头检索列表(子控件照常响应)。
+          // 三套布局:① 宽屏(iPad 横屏,≥_kWideBreakpoint)三栏;② 手机横屏两栏
+          // (左 预览/运动数据/按钮 4 : 右 Tab 3);③ 竖屏 走原 Tab 单列。
+          // 包一层 GestureDetector:点页面任意空白处收起镜头检索列表(子控件照常响应)。
           SafeArea(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: _dismissLensOverlay,
               child: LayoutBuilder(
-                builder: (context, c) =>
-                    c.maxWidth >= _kWideBreakpoint ? _wideBody() : _bodyColumn(),
+                builder: (context, c) {
+                  if (c.maxWidth >= _kWideBreakpoint) return _wideBody();
+                  if (c.maxWidth > c.maxHeight) return _phoneLandscapeBody();
+                  return _bodyColumn();
+                },
               ),
             ),
           ),
@@ -84,8 +88,9 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
-  // iPad 横屏等宽屏阈值:>= 此宽度切「输入 | 预览 | 参数/导出」三栏布局。
-  static const double _kWideBreakpoint = 900;
+  // iPad 横屏等宽屏阈值:>= 此宽度切三栏(输入 | 预览 | 参数/导出);
+  // 取 1000 以便手机横屏(含 Pro Max ~956)走两栏而非三栏。
+  static const double _kWideBreakpoint = 1000;
 
   // 顶栏:返回按钮 + 居中标题「Gyroflow」。
   Widget _topBar() => Row(
@@ -228,16 +233,59 @@ class _PreviewPageState extends State<PreviewPage>
         _previewBox(),
         if (_c.uri != null) ...[const SizedBox(height: 6), _gyroTimeline()],
         _controlButtons(),
-        // 底部 Tab(输入/参数;导出已并入「参数」末尾)。
-        GyroTabBar(
-          index: _tab,
-          onChanged: (i) => setState(() => _tab = i),
-          tabs: [
-            (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
-            (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
-          ],
-        ),
+        _tabBar(),
         Expanded(flex: 5, child: _tabContent()),
+      ],
+    );
+  }
+
+  // 底部 Tab 栏(输入/参数;导出已并入「参数」末尾)。
+  Widget _tabBar() => GyroTabBar(
+        index: _tab,
+        onChanged: (i) => setState(() => _tab = i),
+        tabs: [
+          (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
+          (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
+        ],
+      );
+
+  // 手机横屏:左(4)预览 + 运动数据 + 5 按钮;右(3)Tab(输入/参数,内容 + 标签)。
+  Widget _phoneLandscapeBody() {
+    return Column(
+      children: [
+        _topBar(),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 左栏(4):预览填充顶部 + 运动数据波形 + 控制按钮。
+              Expanded(
+                flex: 4,
+                child: Column(
+                  children: [
+                    Expanded(child: _previewContent()),
+                    if (_c.uri != null) ...[
+                      const SizedBox(height: 6),
+                      _gyroTimeline(),
+                    ],
+                    _controlButtons(),
+                  ],
+                ),
+              ),
+              const VerticalDivider(width: 1, color: GfColors.border),
+              // 右栏(3):Tab 内容 + 底部 Tab 标签。
+              Expanded(
+                flex: 3,
+                child: Column(
+                  children: [
+                    Expanded(child: _tabContent()),
+                    _tabBar(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
