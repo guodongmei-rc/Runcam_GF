@@ -116,12 +116,16 @@ class _PreviewPageState extends State<PreviewPage>
                 syncPoints: _c.autosyncSyncPoints,
                 durationMs: (_c.videoInfo?.durationS ?? 0) * 1000,
                 onSeek: (p) => _c.seekToProgress(p),
-                // 裁剪区间:手柄拖动按时长换算成 µs 回写控制器(导出仅渲染该段)。
+                // 裁剪区间:仅在裁剪开关开启时显示选区/手柄(回调为 null 即隐藏);
+                // 手柄拖动按时长换算成 µs 回写控制器(导出仅渲染该段)。
                 trimStart: _c.trimStartFrac,
                 trimEnd: _c.trimEndFrac,
-                onTrimStart: (p) =>
-                    _c.setTrimStartUs((p * _durationUs).round()),
-                onTrimEnd: (p) => _c.setTrimEndUs((p * _durationUs).round()),
+                onTrimStart: _c.trimEnabled
+                    ? (p) => _c.setTrimStartUs((p * _durationUs).round())
+                    : null,
+                onTrimEnd: _c.trimEnabled
+                    ? (p) => _c.setTrimEndUs((p * _durationUs).round())
+                    : null,
               ),
             ],
             // 预览控制按钮行:播放 / 切换稳定概览 / 防抖 / 背景模式(对齐官方预览控制)。
@@ -164,20 +168,13 @@ class _PreviewPageState extends State<PreviewPage>
                           },
                   ),
                   const SizedBox(width: 8),
-                  // 裁剪起点 [ :把当前播放头设为导出区间起点(对齐桌面 trim-in)。
+                  // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;
+                  // 关闭→取消选区,导出整片。
                   _ctrlBtn(
-                    icon: Icons.align_horizontal_left,
-                    label: context.l10n.prevTrimStart,
-                    active: _c.isTrimmed,
-                    onTap: _c.uri == null ? null : _c.setTrimStartToPlayhead,
-                  ),
-                  const SizedBox(width: 8),
-                  // 裁剪终点 ] :把当前播放头设为导出区间终点(对齐桌面 trim-out)。
-                  _ctrlBtn(
-                    icon: Icons.align_horizontal_right,
-                    label: context.l10n.prevTrimEnd,
-                    active: _c.isTrimmed,
-                    onTap: _c.uri == null ? null : _c.setTrimEndToPlayhead,
+                    icon: Icons.content_cut,
+                    label: context.l10n.prevTrim,
+                    active: _c.trimEnabled,
+                    onTap: _c.uri == null ? null : _c.toggleTrim,
                   ),
                 ],
               ),

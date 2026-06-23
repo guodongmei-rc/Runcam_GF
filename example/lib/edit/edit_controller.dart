@@ -283,8 +283,9 @@ class EditController extends ChangeNotifier {
         exportAudio: params.exportAudio,
         width: exportWidth,
         height: exportHeight,
-        trimStartUs: trimStartUs,
-        trimEndUs: trimEndUs,
+        // 开关关闭 → 传 0/0 表示导出整片;开启 → 传选区区间。
+        trimStartUs: trimEnabled ? trimStartUs : 0,
+        trimEndUs: trimEnabled ? trimEndUs : 0,
       ));
       exportRunning = false;
       _exportClock.stop();
@@ -483,9 +484,10 @@ class EditController extends ChangeNotifier {
 
   int get totalFrames => videoInfo?.frameCount ?? 0;
 
-  // ── 裁剪区间(导出仅渲染 [trimStartUs, trimEndUs];默认全片)──
+  // ── 裁剪区间(单按钮开关:开启时导出仅渲染 [trimStartUs, trimEndUs],关闭时导出整片)──
   // 基准时长(µs):与时间线/播放头一致(progress 0..1 映射到 [0, durationUs])。
   int get _durationUs => ((videoInfo?.durationS ?? 0) * 1e6).round();
+  bool trimEnabled = false; // 是否启用裁剪(关=导出整片)
   int trimStartUs = 0;
   int? _trimEndUs; // null = 到结尾(= _durationUs);打开新视频时复位
   int get trimEndUs => _trimEndUs ?? _durationUs;
@@ -497,16 +499,31 @@ class EditController extends ChangeNotifier {
   double get trimEndFrac =>
       _durationUs > 0 ? (trimEndUs / _durationUs).clamp(0.0, 1.0) : 1.0;
 
-  /// 是否已裁剪(非全片)——决定导出是否传裁剪区间、UI 是否高亮。
-  bool get isTrimmed =>
-      _durationUs > 0 &&
-      (trimStartUs > 0 || trimEndUs < _durationUs - _minTrimGapUs);
+  /// 是否按裁剪区间导出(= 开关开)。关闭时导出整片。
+  bool get isTrimmed => trimEnabled;
 
-  /// 裁剪后的帧数(导出蒙版进度用;真实总帧由原生回报覆盖)。
+  /// 裁剪后的帧数(导出蒙版进度用;真实总帧由原生回报覆盖)。关闭时 = 整片帧数。
   int get trimmedFrames {
+    if (!trimEnabled) return totalFrames;
     final fps = videoInfo?.fps ?? 0;
     if (fps <= 0) return totalFrames;
     return ((trimEndUs - trimStartUs).clamp(0, _durationUs) / 1e6 * fps).round();
+  }
+
+  /// 切换裁剪开关:开启时选区默认取「居中、占总长 1/3」;关闭时清空选区(导出整片)。
+  void toggleTrim() {
+    trimEnabled = !trimEnabled;
+    if (trimEnabled) {
+      final dur = _durationUs;
+      if (dur > 0) {
+        trimStartUs = (dur / 3).round(); // 居中的 1/3:[1/3, 2/3]
+        _trimEndUs = (dur * 2 / 3).round();
+      }
+    } else {
+      trimStartUs = 0;
+      _trimEndUs = null;
+    }
+    notifyListeners();
   }
 
   void setTrimStartUs(int us) {
@@ -522,19 +539,6 @@ class EditController extends ChangeNotifier {
     if (dur <= 0) return;
     final minEnd = (trimStartUs + _minTrimGapUs).clamp(0, dur);
     _trimEndUs = us.clamp(minEnd, dur);
-    notifyListeners();
-  }
-
-  /// 「设裁剪起点 = 当前播放头」(对齐桌面 trim-in `[` 按钮)。
-  void setTrimStartToPlayhead() => setTrimStartUs(_playheadUs);
-
-  /// 「设裁剪终点 = 当前播放头」(对齐桌面 trim-out `]` 按钮)。
-  void setTrimEndToPlayhead() => setTrimEndUs(_playheadUs);
-
-  /// 清除裁剪,恢复全片。
-  void clearTrim() {
-    trimStartUs = 0;
-    _trimEndUs = null;
     notifyListeners();
   }
 
@@ -569,7 +573,8 @@ class EditController extends ChangeNotifier {
     _gyroDataDetected = false; // 新视频:重置陀螺检测锁存(下方默认 recompute 后重判)
     exportFileNameOverride = null; // 新视频:导出名回到默认(输入名_stabilized);目录保留(对齐官方)
     autosyncSyncPoints = const []; // 新视频:清旧同步点
-    trimStartUs = 0; // 新视频:裁剪区间复位为全片
+    trimEnabled = false; // 新视频:裁剪开关复位(导出整片)
+    trimStartUs = 0;
     _trimEndUs = null;
     // 不复位 _folderAuthorized:授权过一次后整个会话不再显示蓝框(对齐用户预期)。
     try {

@@ -86,10 +86,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get prevSelectVideoHint => '选视频后可调参';
 
   @override
-  String get prevTrimStart => '设裁剪起点';
-
-  @override
-  String get prevTrimEnd => '设裁剪终点';
+  String get prevTrim => '裁剪';
 
   @override
   String get pvStatusInitial => '点「选视频」开始';

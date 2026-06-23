@@ -87,10 +87,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get prevSelectVideoHint => 'Select a video to adjust parameters';
 
   @override
-  String get prevTrimStart => 'Set trim start';
-
-  @override
-  String get prevTrimEnd => 'Set trim end';
+  String get prevTrim => 'Trim';
 
   @override
   String get pvStatusInitial => 'Tap \'Pick Video\' to start';

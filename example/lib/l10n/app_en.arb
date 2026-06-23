@@ -42,8 +42,7 @@
   },
   "prevCancel": "Cancel",
   "prevSelectVideoHint": "Select a video to adjust parameters",
-  "prevTrimStart": "Set trim start",
-  "prevTrimEnd": "Set trim end",
+  "prevTrim": "Trim",
 
   "pvStatusInitial": "Tap 'Pick Video' to start",
   "pvStatusNativeDirect": "Native direct (PlatformView) · out={size}",
