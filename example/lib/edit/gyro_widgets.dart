@@ -38,6 +38,21 @@ class SliderLayout extends InheritedWidget {
   bool updateShouldNotify(SliderLayout old) => old.twoRow != twoRow;
 }
 
+/// 标记子树内的交互控件「禁用」:无视频时参数模块仍显示、可滚动,但控件不可操作。
+/// 各 Gyro 控件读取它后把回调置空 / 输入框只读(不拦截指针,故滚动照常)。
+class DisableControls extends InheritedWidget {
+  const DisableControls(
+      {super.key, required this.disabled, required super.child});
+  final bool disabled;
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<DisableControls>()
+          ?.disabled ??
+      false;
+  @override
+  bool updateShouldNotify(DisableControls old) => old.disabled != disabled;
+}
+
 /// 原生同款滑杆行:标签(灰)+ 橙色滑条 + **可编辑数值输入框**(+ 单位)。
 /// 数值以**显示单位**给(如平滑度 0–100%),调用方自行换算到模型单位。
 class GyroSlider extends StatefulWidget {
@@ -106,8 +121,9 @@ class _GyroSliderState extends State<GyroSlider> {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = DisableControls.of(context); // 无视频:可滚动但不可操作
     final title = GestureDetector(
-      onDoubleTap: widget.onTitleDoubleTap, // 双击恢复加载值
+      onDoubleTap: disabled ? null : widget.onTitleDoubleTap, // 双击恢复加载值
       behavior: HitTestBehavior.opaque,
       child: Text(widget.label,
           style: const TextStyle(color: GfColors.textSecondary, fontSize: 13)),
@@ -131,6 +147,7 @@ class _GyroSliderState extends State<GyroSlider> {
               child: TextField(
                 controller: _ctrl,
                 focusNode: _focus,
+                enabled: !disabled, // 无视频:数值框只读
                 keyboardType: TextInputType.numberWithOptions(
                     decimal: widget.precision > 0, signed: widget.min < 0),
                 inputFormatters: numFormatters(
@@ -167,7 +184,7 @@ class _GyroSliderState extends State<GyroSlider> {
           value: widget.value.clamp(widget.min, widget.max),
           min: widget.min,
           max: widget.max,
-          onChanged: widget.onChanged,
+          onChanged: disabled ? null : widget.onChanged, // 无视频:滑条禁用
           padding: padding,
         );
 
@@ -211,8 +228,9 @@ class GyroCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = DisableControls.of(context);
     return InkWell(
-      onTap: () => onChanged(!value),
+      onTap: disabled ? null : () => onChanged(!value),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(children: [
@@ -258,6 +276,7 @@ class GyroDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = DisableControls.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(children: [
@@ -265,7 +284,7 @@ class GyroDropdown extends StatelessWidget {
           SizedBox(
             width: 104,
             child: GestureDetector(
-              onDoubleTap: onTitleDoubleTap, // 双击恢复加载值
+              onDoubleTap: disabled ? null : onTitleDoubleTap, // 双击恢复加载值
               behavior: HitTestBehavior.opaque,
               child: Text(label,
                   style: const TextStyle(
@@ -289,9 +308,11 @@ class GyroDropdown extends StatelessWidget {
                 for (var i = 0; i < options.length; i++)
                   DropdownMenuItem(value: i, child: Text(options[i])),
               ],
-              onChanged: (v) {
-                if (v != null) onChanged(v);
-              },
+              onChanged: disabled
+                  ? null
+                  : (v) {
+                      if (v != null) onChanged(v);
+                    },
             ),
           ),
         ),
@@ -398,8 +419,9 @@ class GyroAdvToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = DisableControls.of(context);
     return InkWell(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(

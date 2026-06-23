@@ -562,9 +562,10 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
-  // 未导入视频时:内容照常显示但整体不可操作(拦截点击 + 变暗)。
+  // 未导入视频时:内容照常显示、**仍可滚动**,但控件不可操作(各控件读 DisableControls 置空回调)。
   Widget _disabledIfNoVideo(Widget child) => _c.uri == null
-      ? IgnorePointer(child: Opacity(opacity: 0.5, child: child))
+      ? DisableControls(
+          disabled: true, child: Opacity(opacity: 0.5, child: child))
       : child;
 
   Widget _tabContent() {
