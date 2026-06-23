@@ -240,6 +240,7 @@ class GyroflowExporter(
             var inputDone = false
             var decodeDone = false
             var tRender = 0L; var tFrames = 0L
+            var prevPts = -1L // 流水线滞后一帧:nativeRenderFrameI420 返回的是上一帧 I420,配上一帧 pts
             try {
                 while (!decodeDone) {
                     if (cancelled) throw RuntimeException("已取消")
@@ -269,8 +270,9 @@ class GyroflowExporter(
                                 val t1 = System.nanoTime()
                                 val i420 = GyroflowNative.nativeRenderFrameI420(f.y, f.u, f.v, f.width, f.height, ptsUs)
                                 tRender += System.nanoTime() - t1
-                                if (i420.isNotEmpty()) {
-                                    while (!queue.offer(EncFrame(i420, ptsUs, false), 50, MS)) {
+                                // 返回的是上一帧的 I420(滞后一帧)→ 用上一帧的 pts 入队;首帧 i420 为空跳过。
+                                if (i420.isNotEmpty() && prevPts >= 0) {
+                                    while (!queue.offer(EncFrame(i420, prevPts, false), 50, MS)) {
                                         if (cancelled || consumerStopped.get()) throw RuntimeException("已取消")
                                     }
                                     tFrames++
@@ -287,10 +289,18 @@ class GyroflowExporter(
                                     val remain = if (efps > 0f && totalFrames > 0) ((totalFrames - tFrames) / efps).coerceAtLeast(0f) else 0f
                                     onProgress(Progress(tFrames.toInt(), totalFrames, efps, elapsed, remain, pct))
                                 }
+                                prevPts = ptsUs
                             }
                         }
                         decoder.releaseOutputBuffer(outIdx, false)
                         if (eos) decodeDone = true
+                    }
+                }
+                // 排空流水线滞留的最后一帧(用最后一帧的 pts)。
+                val last = GyroflowNative.nativeRenderFlushI420()
+                if (last.isNotEmpty() && prevPts >= 0) {
+                    while (!queue.offer(EncFrame(last, prevPts, false), 50, MS)) {
+                        if (cancelled || consumerStopped.get()) throw RuntimeException("已取消")
                     }
                 }
             } catch (t: Throwable) {

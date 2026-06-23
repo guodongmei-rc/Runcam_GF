@@ -125,8 +125,13 @@ object GyroflowNative {
     external fun nativeGetOutputSize(): IntArray
     /** 导出模式: 开启后逐帧只渲染输出供回读, 不上屏(预览不随导出"动" + 更快)。 */
     external fun nativeSetExportMode(on: Boolean): Int
-    /** 导出逐帧: 输入紧凑 YUV → 稳定 → 回读为 I420 字节(尺寸=当前 output_size)。空=失败。 */
+    /**
+     * 导出逐帧(流水线/双缓冲):输入本帧紧凑 YUV → 稳定 → 提交本帧回读,**返回上一帧**的 I420
+     * (首帧返回空数组)。把回读的同步等待藏到下一帧,显著提速。收尾用 nativeRenderFlushI420 取最后一帧。
+     */
     external fun nativeRenderFrameI420(y: ByteArray, u: ByteArray, v: ByteArray, width: Int, height: Int, timestampUs: Long): ByteArray
+    /** 导出收尾:排空流水线滞留的最后一帧 I420(无则空数组)。 */
+    external fun nativeRenderFlushI420(): ByteArray
 
     /** 编辑相机矩阵/畸变系数(param ∈ fx,fy,cx,cy,k1..k4)并重算。 */
     external fun nativeSetLensParam(param: String, value: Double): String?

@@ -1860,7 +1860,8 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeRenderFrameI4
             let _ = crate::preview::process_frame_gpu(&yd, &ud, &vd, &kp, &matrices, &mesh, &drawing, &dm);
         }
         let t2 = Instant::now();
-        let bytes = crate::preview::readback_output_i420().map(|(_, _, b)| b).unwrap_or_default();
+        // 流水线回读:返回的是**上一帧**的 I420(首帧为空);收尾用 nativeRenderFlushI420 取最后一帧。
+        let bytes = crate::preview::readback_pipelined().map(|(_, _, b)| b).unwrap_or_default();
         let t3 = Instant::now();
 
         let o = Ordering::Relaxed;
@@ -1874,6 +1875,17 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeRenderFrameI4
                 T_GPU.load(o) as f64 / n as f64 / 1000.0,
                 T_RB.load(o) as f64 / n as f64 / 1000.0);
         }
+        Ok(env.byte_array_from_slice(&bytes)?.into_raw())
+    }).resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// 导出收尾:排空流水线滞留的最后一帧,返回其 I420(无则空数组)。
+#[no_mangle]
+pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeRenderFlushI420<'local>(
+    mut env: EnvUnowned<'local>, _class: JClass<'local>,
+) -> jni::sys::jbyteArray {
+    env.with_env(|env| -> jni::errors::Result<jni::sys::jbyteArray> {
+        let bytes = crate::preview::readback_flush().map(|(_, _, b)| b).unwrap_or_default();
         Ok(env.byte_array_from_slice(&bytes)?.into_raw())
     }).resolve::<ThrowRuntimeExAndDefault>()
 }
