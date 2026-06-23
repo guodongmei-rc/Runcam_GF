@@ -161,55 +161,70 @@ class _PreviewPageState extends State<PreviewPage>
   }
 
   // 预览控制按钮行:播放 / 稳定概览 / 防抖 / 背景模式 / 裁剪。
-  Widget _controlButtons() => Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-        child: Row(
-          children: [
-            _ctrlBtn(
-              icon: _c.playing ? Icons.pause : Icons.play_arrow,
-              label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
-              active: _c.playing,
-              onTap: _c.uri == null ? null : _c.togglePlay,
-            ),
-            const SizedBox(width: 8),
-            _ctrlBtn(
-              svgAsset: 'assets/icons/fov-overview.svg', // 官方稳定概览图标
-              label: context.l10n.prevStabOverview,
-              active: _c.fovOverview,
-              onTap: _c.uri == null ? null : _c.toggleFovOverview,
-            ),
-            const SizedBox(width: 8),
-            _ctrlBtn(
-              svgAsset: 'assets/icons/gyroflow.svg', // 官方防抖图标
-              label: context.l10n.prevStabilization,
-              active: _c.stabEnabled,
-              onTap: _c.uri == null ? null : _c.toggleStab,
-            ),
-            const SizedBox(width: 8),
-            _ctrlBtn(
-              icon: _bgModeIcon(_c.backgroundMode),
-              label: _c.backgroundModeName,
-              active: false,
-              onTap: _c.uri == null
-                  ? null
-                  : () {
-                      _c.cycleBackgroundMode();
-                      if (!_c.fovOverview) {
-                        _toast(context.l10n.prevEnableOverviewHint);
-                      }
-                    },
-            ),
-            const SizedBox(width: 8),
-            // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;关闭→导出整片。
-            _ctrlBtn(
-              icon: Icons.content_cut,
-              label: context.l10n.prevTrim,
-              active: _c.trimEnabled,
-              onTap: _c.uri == null ? null : _c.toggleTrim,
-            ),
-          ],
-        ),
-      );
+  // compact(手机横屏):按钮高度与上下间距减半。
+  Widget _controlButtons({bool compact = false}) {
+    final h = compact ? 22.0 : 44.0;
+    final isz = compact ? 16.0 : 20.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(10, compact ? 5 : 10, 10, compact ? 5 : 10),
+      child: Row(
+        children: [
+          _ctrlBtn(
+            icon: _c.playing ? Icons.pause : Icons.play_arrow,
+            label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
+            active: _c.playing,
+            onTap: _c.uri == null ? null : _c.togglePlay,
+            height: h,
+            iconSize: isz,
+          ),
+          const SizedBox(width: 8),
+          _ctrlBtn(
+            svgAsset: 'assets/icons/fov-overview.svg', // 官方稳定概览图标
+            label: context.l10n.prevStabOverview,
+            active: _c.fovOverview,
+            onTap: _c.uri == null ? null : _c.toggleFovOverview,
+            height: h,
+            iconSize: isz,
+          ),
+          const SizedBox(width: 8),
+          _ctrlBtn(
+            svgAsset: 'assets/icons/gyroflow.svg', // 官方防抖图标
+            label: context.l10n.prevStabilization,
+            active: _c.stabEnabled,
+            onTap: _c.uri == null ? null : _c.toggleStab,
+            height: h,
+            iconSize: isz,
+          ),
+          const SizedBox(width: 8),
+          _ctrlBtn(
+            icon: _bgModeIcon(_c.backgroundMode),
+            label: _c.backgroundModeName,
+            active: false,
+            onTap: _c.uri == null
+                ? null
+                : () {
+                    _c.cycleBackgroundMode();
+                    if (!_c.fovOverview) {
+                      _toast(context.l10n.prevEnableOverviewHint);
+                    }
+                  },
+            height: h,
+            iconSize: isz,
+          ),
+          const SizedBox(width: 8),
+          // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;关闭→导出整片。
+          _ctrlBtn(
+            icon: Icons.content_cut,
+            label: context.l10n.prevTrim,
+            active: _c.trimEnabled,
+            onTap: _c.uri == null ? null : _c.toggleTrim,
+            height: h,
+            iconSize: isz,
+          ),
+        ],
+      ),
+    );
+  }
 
   // 参数模块整列(同一滚动):同步(顶,对齐官方 同步→稳定)→ 稳定 → 导出(稳定模块下方)。
   // 仅 iPad 三栏右栏用(无 Tab,故把导出接在稳定下方一起滚)。
@@ -248,9 +263,10 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
-  // Tab 栏:输入 / 参数 / 导出(三个)。
-  Widget _tabBar() => GyroTabBar(
+  // Tab 栏:输入 / 参数 / 导出(三个)。compact(手机横屏)高度约减半。
+  Widget _tabBar({bool compact = false}) => GyroTabBar(
         index: _tab,
+        compact: compact,
         onChanged: (i) => setState(() => _tab = i),
         tabs: [
           (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
@@ -290,7 +306,7 @@ class _PreviewPageState extends State<PreviewPage>
                 const SizedBox(height: 6),
                 _gyroTimeline(height: 42), // 手机横屏:运动数据高度减半
               ],
-              _controlButtons(),
+              _controlButtons(compact: true), // 按钮高度减半
             ],
           ),
         ),
@@ -299,7 +315,7 @@ class _PreviewPageState extends State<PreviewPage>
           flex: 3,
           child: Column(
             children: [
-              _tabBar(), // 直接顶到最上端
+              _tabBar(compact: true), // 直接顶到最上端 + 高度减半
               Expanded(child: _tabContent()),
             ],
           ),
@@ -352,7 +368,9 @@ class _PreviewPageState extends State<PreviewPage>
       String? svgAsset, // 自定义 SVG 图标(如官方稳定概览图标),与 icon 二选一
       required String label,
       required bool active,
-      required VoidCallback? onTap}) {
+      required VoidCallback? onTap,
+      double height = 44,
+      double iconSize = 20}) {
     final enabled = onTap != null;
     final fg = !enabled
         ? GfColors.textSecondary
@@ -365,7 +383,7 @@ class _PreviewPageState extends State<PreviewPage>
         child: GestureDetector(
           onTap: onTap,
           child: Container(
-            height: 44,
+            height: height,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: active && enabled ? GfColors.accent : Colors.transparent,
@@ -375,10 +393,10 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             child: svgAsset != null
                 ? SvgPicture.asset(svgAsset,
-                    width: 20,
-                    height: 20,
+                    width: iconSize,
+                    height: iconSize,
                     colorFilter: ColorFilter.mode(fg, BlendMode.srcIn))
-                : Icon(icon, size: 20, color: fg),
+                : Icon(icon, size: iconSize, color: fg),
           ),
         ),
       ),

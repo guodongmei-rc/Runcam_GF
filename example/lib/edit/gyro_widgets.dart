@@ -321,10 +321,15 @@ class GyroBigButton extends StatelessWidget {
 /// 原生同款底部 Tab(输入 / 参数 / 导出),选中=橙色 + 下划线。
 class GyroTabBar extends StatelessWidget {
   const GyroTabBar(
-      {super.key, required this.index, required this.onChanged, required this.tabs});
+      {super.key,
+      required this.index,
+      required this.onChanged,
+      required this.tabs,
+      this.compact = false});
   final int index;
   final ValueChanged<int> onChanged;
   final List<({IconData icon, String label})> tabs;
+  final bool compact; // 紧凑模式(手机横屏):高度约减半
 
   @override
   Widget build(BuildContext context) {
@@ -337,7 +342,7 @@ class GyroTabBar extends StatelessWidget {
               child: InkWell(
                 onTap: () => onChanged(i),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: EdgeInsets.symmetric(vertical: compact ? 4 : 10),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
@@ -350,12 +355,12 @@ class GyroTabBar extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(tabs[i].icon,
-                          size: 20,
+                          size: compact ? 15 : 20,
                           color: i == index ? GfColors.accent : GfColors.textSecondary),
-                      const SizedBox(height: 3),
+                      SizedBox(height: compact ? 1 : 3),
                       Text(tabs[i].label,
                           style: TextStyle(
-                              fontSize: 12,
+                              fontSize: compact ? 10 : 12,
                               color: i == index
                                   ? GfColors.accent
                                   : GfColors.textSecondary)),
