@@ -37,9 +37,9 @@ class _PreviewPageState extends State<PreviewPage>
 
   void _onChange() => setState(() {});
 
-  // 点页面任意空白处:收键盘 + 收起镜头检索结果列表。
+  // 点页面任意空白处:收起镜头检索结果列表。
+  // 不强制收键盘 —— 镜头搜索框「有输入时」要保持键盘(其收起由搜索框自身 onTapOutside 处理)。
   void _dismissLensOverlay() {
-    FocusScope.of(context).unfocus();
     _c.clearLensResults();
   }
 

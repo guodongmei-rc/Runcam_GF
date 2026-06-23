@@ -307,8 +307,10 @@ class _InputPanelState extends State<InputPanel> {
         TextField(
           controller: _lensQuery,
           focusNode: _lensFocus,
-          // 点击输入框外的任意位置即收起键盘(对齐「同步搜索尺寸」数值框交互)。
-          onTapOutside: (_) => _lensFocus.unfocus(),
+          // 有输入内容时,点空白处不收键盘(方便继续修改检索词);无内容时才收起。
+          onTapOutside: (_) {
+            if (_lensQuery.text.trim().isEmpty) _lensFocus.unfocus();
+          },
           enabled: c.uri != null,
           style: const TextStyle(color: GfColors.text, fontSize: 14),
           textInputAction: TextInputAction.done, // 键盘右下角显示「完成」
