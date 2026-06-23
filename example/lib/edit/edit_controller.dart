@@ -574,6 +574,15 @@ class EditController extends ChangeNotifier {
     final picked = await _picker.invokeMethod<String>('pickVideo');
     if (picked == null) return;
     _setBusy(true);
+    // 重新打开视频前:先彻底拆掉上一个预览后端(停旧解码线程 + 释放 wgpu surface)。
+    // 否则旧解码线程仍在调 nativeProcessFrame,而下面 createStabilizer/openVideo/recompute
+    // 又在改同一「单例」引擎 → 两边并发动引擎 → wgpu 致命错误 + surface 销毁 SIGABRT
+    // (先开 GoPro 10 再开 GoPro 6 必崩的根因:旧 decoder 喂帧与新视频初始化打架)。
+    playing = false;
+    _maybeRunPreviewClock(); // 停 Dart 预览时钟(取消方向/HUD 定时器)
+    try {
+      await _stopBackend(); // dispose 旧 PreviewController:decoder.stop() + surfaceDestroyed
+    } catch (_) {/* 无旧后端/拆除失败:忽略,继续打开新视频 */}
     // 新视频:外挂运动数据状态复位(对齐原生 setExternalMotionControlsVisible:NO)。
     _motionFilePath = null;
     motionFormat = null;
