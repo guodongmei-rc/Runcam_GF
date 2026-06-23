@@ -94,80 +94,91 @@ class _GyroSliderState extends State<GyroSlider> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(children: [
-        SizedBox(
-          width: 104,
-          child: GestureDetector(
-            onDoubleTap: widget.onTitleDoubleTap, // 双击恢复加载值
-            behavior: HitTestBehavior.opaque,
-            child: Text(widget.label,
-                style: const TextStyle(
-                    color: GfColors.textSecondary, fontSize: 13)),
+    final title = GestureDetector(
+      onDoubleTap: widget.onTitleDoubleTap, // 双击恢复加载值
+      behavior: HitTestBehavior.opaque,
+      child: Text(widget.label,
+          style: const TextStyle(color: GfColors.textSecondary, fontSize: 13)),
+    );
+    // 右侧:trailing(如读出方向/链接框)在上,数值输入框在下(对齐官方布局)。
+    final valueBox = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (widget.trailing != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: widget.trailing!,
           ),
-        ),
-        Expanded(
-          child: Slider(
-            value: widget.value.clamp(widget.min, widget.max),
-            min: widget.min,
-            max: widget.max,
-            onChanged: widget.onChanged,
-          ),
-        ),
-        // 右侧:trailing(如读出方向/链接框)在上,数值输入框在下(对齐官方布局)。
-        Column(
+        Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (widget.trailing != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: widget.trailing!,
-              ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 数值输入框:填充圆角样式(同「粗略大致偏移」),占位同原数值文字宽。
-                SizedBox(
-                  width: 58,
-                  child: TextField(
-                    controller: _ctrl,
-                    focusNode: _focus,
-                    keyboardType: TextInputType.numberWithOptions(
-                        decimal: widget.precision > 0, signed: widget.min < 0),
-                    inputFormatters: numFormatters(
-                        decimal: widget.precision > 0,
-                        negative: widget.min < 0),
-                    textAlign: TextAlign.end,
-                    textInputAction: TextInputAction.done,
-                    style: const TextStyle(color: GfColors.text, fontSize: 13),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: true,
-                      fillColor: GfColors.inputBg,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide.none),
-                    ),
-                    onSubmitted: (_) => _focus.unfocus(),
-                    onTapOutside: (_) => _focus.unfocus(),
-                  ),
+            // 数值输入框:填充圆角样式(同「粗略大致偏移」),占位同原数值文字宽。
+            SizedBox(
+              width: 58,
+              child: TextField(
+                controller: _ctrl,
+                focusNode: _focus,
+                keyboardType: TextInputType.numberWithOptions(
+                    decimal: widget.precision > 0, signed: widget.min < 0),
+                inputFormatters: numFormatters(
+                    decimal: widget.precision > 0, negative: widget.min < 0),
+                textAlign: TextAlign.end,
+                textInputAction: TextInputAction.done,
+                style: const TextStyle(color: GfColors.text, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: GfColors.inputBg,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide.none),
                 ),
-                if (widget.unit.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2),
-                    child: Text(widget.unit,
-                        style: const TextStyle(
-                            color: GfColors.textSecondary, fontSize: 12)),
-                  ),
-              ],
+                onSubmitted: (_) => _focus.unfocus(),
+                onTapOutside: (_) => _focus.unfocus(),
+              ),
             ),
+            if (widget.unit.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(widget.unit,
+                    style: const TextStyle(
+                        color: GfColors.textSecondary, fontSize: 12)),
+              ),
           ],
         ),
-      ]),
+      ],
+    );
+    Widget buildSlider(EdgeInsetsGeometry? padding) => Slider(
+          value: widget.value.clamp(widget.min, widget.max),
+          min: widget.min,
+          max: widget.max,
+          onChanged: widget.onChanged,
+          padding: padding,
+        );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: LayoutBuilder(builder: (context, cons) {
+        // 横屏(参数面板在窄右栏,可用宽 < 300)→ 两行:第一行 标题 + 数值/trailing,
+        // 第二行 滑条占满整行,且左缘(padding 水平 0)与标题左缘对齐;否则维持原一行布局。
+        if (cons.maxWidth < 300) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [Expanded(child: title), valueBox]),
+              buildSlider(const EdgeInsets.symmetric(vertical: 6)),
+            ],
+          );
+        }
+        return Row(children: [
+          SizedBox(width: 104, child: title),
+          Expanded(child: buildSlider(null)),
+          valueBox,
+        ]);
+      }),
     );
   }
 }
