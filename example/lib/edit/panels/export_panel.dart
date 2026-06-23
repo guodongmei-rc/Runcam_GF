@@ -242,35 +242,28 @@ class _ExportPanelState extends State<ExportPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (c.uri == null) {
-      final hint = Text(context.l10n.expSelectVideoHint,
-          style: const TextStyle(color: GfColors.textSecondary));
-      // 嵌入模式只占一行提示(不撑满 / 不自带滚动);独立模式仍是整块居中。
-      return widget.embedded
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 12), child: hint)
-          : Container(
-              color: GfColors.bgPanel,
-              alignment: Alignment.center,
-              child: hint);
-    }
     _refillIfNeeded();
     final children = _content(context);
-    // 嵌入(宽屏右栏,跟随 StabilizePanel 的 ListView 一起滚)→ Column;否则自带 ListView。
-    if (widget.embedded) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
-      );
+    // 嵌入(宽屏右栏 / 参数页末尾,跟随外层 ListView 一起滚)→ Column;否则自带 ListView。
+    Widget body = widget.embedded
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children),
+          )
+        : Container(
+            color: GfColors.bgPanel,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+              children: children,
+            ),
+          );
+    // 没有视频时:内容照常显示(对齐稳定/同步模块),但整体不可操作(拦截点击 + 轻微变暗)。
+    if (c.uri == null) {
+      body = IgnorePointer(child: Opacity(opacity: 0.5, child: body));
     }
-    return Container(
-      color: GfColors.bgPanel,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-        children: children,
-      ),
-    );
+    return body;
   }
 
   List<Widget> _content(BuildContext context) {
