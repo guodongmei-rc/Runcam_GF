@@ -81,9 +81,8 @@ class _PreviewPageState extends State<PreviewPage>
                     child: Text(
                       'Gyroflow',
                       style: TextStyle(
-                        color: GfColors.text,
+                        color: GfColors.unselectedBottomBarColor,
                         fontSize: 18,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -91,17 +90,26 @@ class _PreviewPageState extends State<PreviewPage>
                 const SizedBox(width: 48), // 平衡左侧返回按钮宽度,使标题真正居中
               ],
             ),
-            // 预览区。
-            Expanded(
-              flex: 3,
-              child: Container(
-                color: GfColors.bg,
-                width: double.infinity,
-                child: AnimatedBuilder(
-                  animation: _ticker,
-                  builder: (_, _) => PreviewView(controller: _c),
-                ),
-              ),
+            // 预览区:固定高度 = 16:9 视频「左右各留 10」时的高度 =(可用宽 − 20)× 9/16。
+            // 之后任意输出比例都用这个固定高度,宽度 = 高度 × 比例(由内部 AspectRatio 自动算):
+            //   16:9 → 宽 = 可用宽 − 20,左右恰好各 10;
+            //   更窄(如 4:3)→ 等高,宽更小,左右留白更大;均水平居中。
+            // 改输出大小(c.aspect 变)时,高度不变、按新比例重算宽度。
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final previewH = (constraints.maxWidth - 20) * 9 / 16;
+                return SizedBox(
+                  height: previewH,
+                  width: double.infinity,
+                  child: Container(
+                    color: GfColors.bg,
+                    child: AnimatedBuilder(
+                      animation: _ticker,
+                      builder: (_, _) => PreviewView(controller: _c),
+                    ),
+                  ),
+                );
+              },
             ),
             // 陀螺数据波形(对齐原生:预览下方、按钮上方),仅载入视频后显示。
             if (_c.uri != null) ...[
