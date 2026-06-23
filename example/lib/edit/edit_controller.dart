@@ -429,6 +429,17 @@ class EditController extends ChangeNotifier {
         lh != null &&
         (lw != vw || lh != vh);
   }
+
+  /// 镜头标定「宽高比」与视频宽高比不一致 —— 比单纯尺寸不符更严重(结果会不正确)。
+  /// 对齐官方 LensProfile.qml:宽高比不符 → 红色 Error;仅尺寸不同(同比例)→ 橙色 Warning。
+  bool get lensAspectMismatch {
+    final vw = videoInfo?.width, vh = videoInfo?.height;
+    final lw = lensCalibW, lh = lensCalibH;
+    if (vw == null || vh == null || lw == null || lh == null || vh == 0 || lh == 0) {
+      return false;
+    }
+    return (lw / lh).toStringAsFixed(3) != (vw / vh).toStringAsFixed(3);
+  }
   bool underwaterLens = false; // 水下镜头(暂不接引擎,纯本地偏好)
   int lensLoadSeq = 0; // 每次加载镜头自增;面板据此回填输入框(不覆盖用户编辑)
 

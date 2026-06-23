@@ -252,19 +252,26 @@ class _InputPanelState extends State<InputPanel> {
         ),
       );
 
-  // 镜头档案分辨率与视频不符的橙色警告框(文案/样式对齐桌面 Gyroflow)。
-  Widget _lensMismatchBox() => Container(
+  // 镜头档案与视频不符提示(对齐桌面 Gyroflow):
+  //   宽高比不符 → 红色 Error(结果将不正确);仅尺寸不同(同比例)→ 橙色 Warning(可能不正确)。
+  Widget _lensMismatchBox(bool isError) => Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF0A030), // 橙色警告底(对齐官方 InfoMessageSmall warning)
+          color: isError
+              ? const Color(0xFFD9534F) // 红色错误底(宽高比不符)
+              : const Color(0xFFF0A030), // 橙色警告底(仅尺寸不符)
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          context.l10n.inputLensMismatch,
+          isError
+              ? context.l10n.inputLensAspectMismatch
+              : context.l10n.inputLensMismatch,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-              color: Color(0xFF1A1A1A), fontSize: 12, height: 1.4),
+          style: TextStyle(
+              color: isError ? Colors.white : const Color(0xFF1A1A1A),
+              fontSize: 12,
+              height: 1.4),
         ),
       );
 
@@ -320,7 +327,7 @@ class _InputPanelState extends State<InputPanel> {
         // 镜头档案分辨率与视频不符 → 橙色警告(对齐桌面 Gyroflow InfoMessageSmall)。
         if (c.lensDimsMismatch) ...[
           const SizedBox(height: 10),
-          _lensMismatchBox(),
+          _lensMismatchBox(c.lensAspectMismatch),
         ],
         const SizedBox(height: 10),
         // (「当前镜头」标题 + 镜头名已按需求去掉,直接显示镜头信息行。)

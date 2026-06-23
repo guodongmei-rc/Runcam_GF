@@ -595,6 +595,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Lens profile dimensions don\'t match the file dimensions. The result may not look correct.';
 
   @override
+  String get inputLensAspectMismatch =>
+      'Lens profile aspect ratio doesn\'t match the file aspect ratio. The result will not look correct.';
+
+  @override
   String get inputLensProfile => 'Lens profile';
 
   @override

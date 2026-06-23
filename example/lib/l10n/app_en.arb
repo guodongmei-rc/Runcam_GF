@@ -226,6 +226,7 @@
   "inputContainsGyro": "Contains gyro",
   "inputDirHint": "In order to detect project files, video sequences or image sequences, click here and select the directory with input files.",
   "inputLensMismatch": "Lens profile dimensions don't match the file dimensions. The result may not look correct.",
+  "inputLensAspectMismatch": "Lens profile aspect ratio doesn't match the file aspect ratio. The result will not look correct.",
   "inputLensProfile": "Lens profile",
   "inputSearchLens": "Search...",
   "inputAdvanced": "Advanced",

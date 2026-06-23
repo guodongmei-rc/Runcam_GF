@@ -182,6 +182,7 @@
   "inputContainsGyro": "包含陀螺仪数据",
   "inputDirHint": "为检测项目文件、视频序列或图像序列，请点击此处选择带有输入文件的目录。",
   "inputLensMismatch": "镜头配置文件的尺寸与当前文件不符。结果看起来可能会不正确。",
+  "inputLensAspectMismatch": "镜头配置文件的宽高比与当前文件不符。结果看起来可能会不正确。",
   "inputLensProfile": "镜头配置文件",
   "inputSearchLens": "搜索镜头…",
   "inputAdvanced": "高级",
