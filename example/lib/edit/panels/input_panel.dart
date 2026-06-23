@@ -134,9 +134,23 @@ class _InputPanelState extends State<InputPanel> {
     });
   }
 
+  /// 点击空白处:① 若键盘还开着 → 先收起键盘(保留搜索结果列表);
+  /// ② 键盘已收起且有搜索结果 → 收起结果列表。
+  void _onBlankTap() {
+    final focus = FocusScope.of(context);
+    if (focus.hasFocus) {
+      focus.unfocus(); // 第一次:收起键盘,列表保留
+    } else if (_lensResults.isNotEmpty) {
+      setState(() => _lensResults = const []); // 第二次:收起检索列表
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent, // 空白处可点;子控件(搜索框/结果/滑块)照常响应
+      onTap: _onBlankTap,
+      child: Container(
       color: GfColors.bgPanel,
       child: AnimatedBuilder(
         animation: c,
@@ -174,6 +188,7 @@ class _InputPanelState extends State<InputPanel> {
             ],
           );
         },
+      ),
       ),
     );
   }
@@ -275,6 +290,36 @@ class _InputPanelState extends State<InputPanel> {
         ),
       );
 
+  // 检索结果列表(直接在搜索框下方、盖住「打开文件」):圆角卡片,最多 240 高、超出可滚,
+  // 点击某条加载该镜头(_pickLens 会清空结果 → 列表收起、按钮恢复)。
+  Widget _lensResultsList() => Material(
+        color: GfColors.inputBg,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 240),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final r in _lensResults)
+                  InkWell(
+                    onTap: () => _pickLens(r['id']!),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 12),
+                      child: Text(r['name'] ?? r['id']!,
+                          style: const TextStyle(
+                              color: GfColors.accent, fontSize: 13)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+
   // ---- 镜头配置文件 ----
   List<Widget> _lensProfile() => [
         _title(context.l10n.inputLensProfile),
@@ -306,22 +351,16 @@ class _InputPanelState extends State<InputPanel> {
           onSubmitted: _onLensSearchDone, // 点「完成」:收起键盘 + 搜索列表
         ),
         const SizedBox(height: 10),
-        // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
-        Center(
-          child: SizedBox(
-            width: 180,
-            child: _primaryButton(context.l10n.inputOpenFile,
-                (c.busy || c.uri == null) ? null : c.openLensFile),
-          ),
-        ),
-        // 搜索结果(点击加载)。
-        for (final r in _lensResults)
-          InkWell(
-            onTap: () => _pickLens(r['id']!),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: Text(r['name'] ?? r['id']!,
-                  style: const TextStyle(color: GfColors.accent, fontSize: 13)),
+        // 有检索结果:列表直接显示在输入框下方,盖住「打开文件」按钮;无结果时显示按钮。
+        if (_lensResults.isNotEmpty)
+          _lensResultsList()
+        else
+          // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
+          Center(
+            child: SizedBox(
+              width: 180,
+              child: _primaryButton(context.l10n.inputOpenFile,
+                  (c.busy || c.uri == null) ? null : c.openLensFile),
             ),
           ),
         // 镜头档案分辨率与视频不符 → 橙色警告(对齐桌面 Gyroflow InfoMessageSmall)。
