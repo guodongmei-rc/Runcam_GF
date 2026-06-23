@@ -145,7 +145,10 @@ class _GyroPainter extends CustomPainter {
     Color(0xFF4C7C8F),
     Color(0xFF8F4C8F),
   ];
-  static const _syncColor = Color(0xFF25E8D2); // 同步点 teal(对齐官方 #25e8d2)
+  // 自动同步点亮绿(对齐官方有效同步点色 HSV(112°,0.84,0.86) ≈ #3cdb23)。
+  static const _syncColor = Color(0xFF3CDB23);
+  // 播放头:对齐官方 Timeline.qml 的 styleAccentColor(深色主题 #76baed)。
+  static const _playheadColor = Color(0xFF76BAED);
   static const _trimColor = Color(0xFFFF8000); // 裁剪选区(橙,对齐主题色 GfColors.accent)
 
   @override
@@ -252,10 +255,31 @@ class _GyroPainter extends CustomPainter {
     final hbBottom =
         durationMs > 0 ? (size.height - 13.0).clamp(0.0, size.height) : size.height;
 
-    // 播放头竖线(同样不压底部文字带)
+    // 播放头(对齐官方 Timeline.qml handle):浅蓝竖线 + 顶部「旗标头」(圆角矩形 + 下尖角)。
     final px = progress.clamp(0.0, 1.0) * size.width;
-    canvas.drawLine(Offset(px, 0), Offset(px, hbBottom),
-        Paint()..color = const Color(0xFF2196F3)..strokeWidth = 2);
+    final headPaint = Paint()..color = _playheadColor;
+    const headW = 14.0, headBody = 11.0, headTip = 16.0; // 头宽 / 矩形高 / 尖角底
+    // 竖线(从旗标头下沿到文字带上沿)
+    canvas.drawLine(Offset(px, headTip - 2), Offset(px, hbBottom),
+        Paint()..color = _playheadColor..strokeWidth = 2);
+    // 旗标头:圆角矩形 + 下三角尖
+    final headRect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(px - headW / 2, 0, px + headW / 2, headBody),
+        const Radius.circular(3));
+    canvas.drawRRect(headRect, headPaint);
+    final tip = Path()
+      ..moveTo(px - headW / 2 + 1, headBody - 0.5)
+      ..lineTo(px + headW / 2 - 1, headBody - 0.5)
+      ..lineTo(px, headTip)
+      ..close();
+    canvas.drawPath(tip, headPaint);
+    // 头内黑色竖向小刻痕(对齐官方 #000 notch)
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromCenter(
+                center: Offset(px, headBody / 2 + 1), width: 1.5, height: 6),
+            const Radius.circular(1)),
+        Paint()..color = const Color(0xFF000000));
   }
 
   @override
