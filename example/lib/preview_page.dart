@@ -293,7 +293,10 @@ class _PreviewPageState extends State<PreviewPage>
   //   左(4):顶栏(返回+标题)在左上 → 预览(填充)→ 运动数据 → 5 按钮;
   //   右(3):Tab 标签直接顶到最上端 → Tab 内容。
   Widget _phoneLandscapeBody() {
-    return Row(
+    // 手机横屏:参数区里所有 Slider 强制两行(标题一行、滑条一行、左对齐)。
+    return SliderLayout(
+      twoRow: true,
+      child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
@@ -321,6 +324,7 @@ class _PreviewPageState extends State<PreviewPage>
           ),
         ),
       ],
+      ),
     );
   }
 

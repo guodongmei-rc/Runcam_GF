@@ -26,6 +26,18 @@ List<TextInputFormatter> numFormatters(
         {bool decimal = true, bool negative = false}) =>
     [NumInputFormatter(decimal: decimal, negative: negative)];
 
+/// 强制 GyroSlider 两行布局(标题一行、滑条一行,左对齐)的作用域。
+/// 放在某个子树外层(如手机横屏参数区),其内所有 GyroSlider 强制两行;
+/// 不设则按可用宽度自动判定(< 300 两行)。
+class SliderLayout extends InheritedWidget {
+  const SliderLayout({super.key, required this.twoRow, required super.child});
+  final bool twoRow;
+  static bool? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SliderLayout>()?.twoRow;
+  @override
+  bool updateShouldNotify(SliderLayout old) => old.twoRow != twoRow;
+}
+
 /// 原生同款滑杆行:标签(灰)+ 橙色滑条 + **可编辑数值输入框**(+ 单位)。
 /// 数值以**显示单位**给(如平滑度 0–100%),调用方自行换算到模型单位。
 class GyroSlider extends StatefulWidget {
@@ -162,9 +174,10 @@ class _GyroSliderState extends State<GyroSlider> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: LayoutBuilder(builder: (context, cons) {
-        // 横屏(参数面板在窄右栏,可用宽 < 300)→ 两行:第一行 标题 + 数值/trailing,
-        // 第二行 滑条占满整行,且左缘(padding 水平 0)与标题左缘对齐;否则维持原一行布局。
-        if (cons.maxWidth < 300) {
+        // 两行布局触发:外层 SliderLayout 强制(如手机横屏参数区),或可用宽 < 300(窄右栏)。
+        // 第一行 标题 + 数值/trailing,第二行 滑条占满、左缘(padding 水平 0)与标题左缘对齐。
+        final twoRow = SliderLayout.of(context) ?? (cons.maxWidth < 300);
+        if (twoRow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
