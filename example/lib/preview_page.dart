@@ -173,7 +173,7 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             const SizedBox(width: 8),
             _ctrlBtn(
-              icon: Icons.auto_fix_high,
+              svgAsset: 'assets/icons/gyroflow.svg', // 官方防抖图标
               label: context.l10n.prevStabilization,
               active: _c.stabEnabled,
               onTap: _c.uri == null ? null : _c.toggleStab,
