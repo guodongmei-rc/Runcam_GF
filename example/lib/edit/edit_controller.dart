@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/l10n.dart';
 import 'preview_backend.dart';
 
 /// 编辑页控制器:持引擎生命周期 + ParamsModel + 当前预览后端。
@@ -136,9 +137,9 @@ class EditController extends ChangeNotifier {
       _playheadUs = 0;
       _maybeRunPreviewClock();
       await _fetchPreviewStateOnce();
-      status = '输出大小:$w×$h(预览 $pw×$ph)';
+      status = L.current.ctlOutputSizeSet('$w', '$h', '$pw', '$ph');
     } catch (e) {
-      status = '应用输出大小失败:$e';
+      status = L.current.ctlApplyOutputSizeFailed('$e');
     } finally {
       _setBusy(false);
     }
@@ -167,7 +168,7 @@ class EditController extends ChangeNotifier {
   /// 输出目录显示文本(对齐官方移动端:不显示全路径,只显示卷标后的相对短名;
   /// 未选则提示需先选目录)。
   String get exportFolderDisplay =>
-      exportFolder == null ? '请选择导出目录' : _shortFolder(exportFolder!);
+      exportFolder == null ? L.current.ctlSelectExportFolder : _shortFolder(exportFolder!);
 
   // 把目录 uri/路径压成「卷标/容器前缀之后的相对多级路径」(对齐官方 display_url:保留多层级
   // 文件夹名,但不显示根目录那一堆)。Android content uri 取卷标冒号后整段;iOS file:// 去掉
@@ -183,7 +184,7 @@ class EditController extends ChangeNotifier {
           final colon = s.indexOf(':');
           if (colon >= 0) s = s.substring(colon + 1);
           s = trim(s);
-          return s.isEmpty ? '根目录' : s; // 卷标后无子路径 = 选了根目录
+          return s.isEmpty ? L.current.ctlRootDir : s; // 卷标后无子路径 = 选了根目录
         }
       }
       // iOS/其它:去 file:// 前缀,按已知容器标记截取后整段(对齐官方)。
@@ -207,10 +208,10 @@ class EditController extends ChangeNotifier {
         }
       }
       s = trim(s);
-      if (s.isEmpty) return '根目录'; // 容器前缀后无子路径 = 根目录
+      if (s.isEmpty) return L.current.ctlRootDir; // 容器前缀后无子路径 = 根目录
       return s; // 剥掉容器/卷标前缀后,有几级显示几级(由 UI 换行展示)
     } catch (_) {
-      return '根目录';
+      return L.current.ctlRootDir;
     }
   }
 
@@ -230,7 +231,7 @@ class EditController extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      status = '选择目录失败:$e';
+      status = L.current.ctlSelectFolderFailed('$e');
       notifyListeners();
     }
   }
@@ -256,7 +257,7 @@ class EditController extends ChangeNotifier {
     _exportClock
       ..reset()
       ..start();
-    status = '正在初始化导出…';
+    status = L.current.ctlInitializingExport;
     notifyListeners();
     // 导出前:① 禁止参数防抖 recompute 并跑完任何挂起/在飞的 recompute —— 否则改过参数后
     // 那个 200ms 防抖定时器会在导出 await 期间触发,与导出线程并发进引擎而崩溃(改参数后
@@ -286,8 +287,10 @@ class EditController extends ChangeNotifier {
       exportRunning = false;
       _exportClock.stop();
       status = err.isEmpty
-          ? '导出完成:$exportFolderDisplay/$name'
-          : (err == '已取消' ? '已取消导出' : '导出失败:$err');
+          ? L.current.ctlExportComplete('$exportFolderDisplay/$name')
+          : (err == '已取消'
+              ? L.current.ctlExportCancelled
+              : L.current.ctlExportFailed(err));
       params.exportInProgress = false; // 恢复参数防抖 recompute(须在 _restore 重算前)
       // 导出把引擎 output_size 改成全分辨率了,恢复预览尺寸并重渲一帧(纹理仍在,不转圈)。
       await _restorePreviewAfterExport();
@@ -296,7 +299,7 @@ class EditController extends ChangeNotifier {
     } catch (e) {
       exportRunning = false;
       _exportClock.stop();
-      status = '导出失败:$e';
+      status = L.current.ctlExportFailed('$e');
       params.exportInProgress = false;
       await _restorePreviewAfterExport();
       notifyListeners();
@@ -307,7 +310,7 @@ class EditController extends ChangeNotifier {
   /// 取消导出(置原生标志,导出循环下一帧自停)。
   Future<void> cancelExport() async {
     if (!exportRunning) return;
-    status = '正在取消导出…';
+    status = L.current.ctlCancellingExport;
     notifyListeners();
     try {
       await _previewApi.cancelExport();
@@ -356,11 +359,18 @@ class EditController extends ChangeNotifier {
   bool busy = false;
   bool stabEnabled = true; // 防抖开关(打开视频时置 true)
   bool fovOverview = false; // 稳定概览(显示完整稳定画面 = fov+1.0)
-  String status = '在「输入」tab 打开文件开始';
+  String status = L.current.ctlStatusInitial;
+
+  /// 当前背景模式索引(0..3),供预览控制按钮选图标。
+  int get backgroundMode => params.backgroundMode;
 
   /// 背景模式名(对齐 setBackgroundMode 0..3)。
-  String get backgroundModeName =>
-      const ['纯色', '边缘拉伸', '边缘镜像', '羽化留边'][params.backgroundMode.clamp(0, 3)];
+  String get backgroundModeName => [
+        L.current.ctlBgSolid,
+        L.current.ctlBgRepeatEdge,
+        L.current.ctlBgMirrorEdge,
+        L.current.ctlBgFeather,
+      ][params.backgroundMode.clamp(0, 3)];
 
   /// 防抖开关。注意:核心 process_frame **不消费** stab_enabled 标志(只在桌面 glue 层用),
   /// 所以单调 setStabEnabled 对预览无效。这里用「平滑方式」切换实现预览防抖开关:
@@ -396,7 +406,7 @@ class EditController extends ChangeNotifier {
   // 镜头配置(「输入」面板)。
   String? detectedCamera; // 「检测到的相机」
   String? detectedLens; // 「检测镜头」
-  String lensName = '未加载镜头档案';
+  String lensName = L.current.ctlNoLensProfile;
   Map<String, String> lensInfo = {}; // 相机/镜头/设置/其他信息/尺寸/校准人
   // 高级镜头档案(可编辑,数据来自 getLensInfoFull,对齐原生「高级」段)。
   double? lensFx, lensFy, lensCx, lensCy; // 像素焦距 fx/fy、聚焦中心 cx/cy
@@ -549,7 +559,7 @@ class EditController extends ChangeNotifier {
       _playheadUs = 0;
       _maybeRunPreviewClock();
       await _fetchPreviewStateOnce(); // 方向指示器:载入即回显起始姿态(不等播放)
-      status = '后端:${backend.label}';
+      status = L.current.ctlBackend(backend.label);
       _snapshotLoadedParams(); // 快照「加载镜头(及覆盖)后的参数值」,供双击标题恢复
       // 陀螺-画面同步(严格对齐原生 ViewController.mm:940 四闸门):
       //   镜头档案声明 do_autosync(lensDoAutosync,如 RunCam 系列)+ 有运动 + 非精确时间戳
@@ -560,7 +570,7 @@ class EditController extends ChangeNotifier {
         await _startAutosync(picked);
       }
     } catch (e) {
-      status = '失败:$e';
+      status = L.current.ctlFailed('$e');
     } finally {
       _setBusy(false);
     }
@@ -607,7 +617,7 @@ class EditController extends ChangeNotifier {
       backend = backend.other;
       playing = false; // 切后端后同样停在首帧,等手动播放
       await _startBackend();
-      status = '后端:${backend.label}';
+      status = L.current.ctlBackend(backend.label);
     } finally {
       _setBusy(false);
     }
@@ -720,11 +730,11 @@ class EditController extends ChangeNotifier {
         await _startAutosync(uri!);
       } else {
         status = (motionPath == null && lensPath == null)
-            ? '目录里未找到匹配「$base」的 sidecar'
-            : '已加载目录 sidecar';
+            ? L.current.ctlNoSidecarFound(base)
+            : L.current.ctlFolderSidecarLoaded;
       }
     } catch (e) {
-      status = '目录授权失败:$e';
+      status = L.current.ctlFolderAuthFailed('$e');
     } finally {
       _setBusy(false);
       notifyListeners();
@@ -791,9 +801,9 @@ class EditController extends ChangeNotifier {
       await _bridge.loadLens(idOrPath);
       await _bridge.recomputeBlocking();
       await _fetchLensInfo();
-      status = '✓ 已加载镜头档案';
+      status = L.current.ctlLensLoaded;
     } catch (e) {
-      status = '镜头加载失败:$e';
+      status = L.current.ctlLensLoadFailed('$e');
     } finally {
       _setBusy(false);
     }
@@ -895,21 +905,22 @@ class EditController extends ChangeNotifier {
 
       detectedCamera = s('camera');
       detectedLens = s('lens') ?? s('lens_model');
-      lensName = s('name') ?? s('identifier') ?? '未加载镜头档案';
+      lensName = s('name') ?? s('identifier') ?? L.current.ctlNoLensProfile;
       final cd = j['calib_dimension'];
       lensCalibW = (cd is Map && cd['w'] is num) ? (cd['w'] as num).toInt() : null;
       lensCalibH = (cd is Map && cd['h'] is num) ? (cd['h'] as num).toInt() : null;
       final dim = (cd is Map && cd['w'] != null && cd['h'] != null)
           ? '${cd['w']}×${cd['h']}'
           : null;
+      // 键为稳定标识符(非显示文本),由「输入」面板 _lensLabel 翻译成本地化标签。
       lensInfo = {
-        '相机': ?detectedCamera,
-        '镜头': ?detectedLens,
+        'camera': ?detectedCamera,
+        'lens': ?detectedLens,
         // 设置 / 其他信息:对齐原生,即使为空也保留该行(显示空值)。
-        '设置': s('camera_setting') ?? '',
-        '其他信息': s('note') ?? '',
-        '尺寸': ?dim,
-        '校准人': ?s('calibrated_by'),
+        'setting': s('camera_setting') ?? '',
+        'note': s('note') ?? '',
+        'dimensions': ?dim,
+        'calibratedBy': ?s('calibrated_by'),
       };
       // 高级段:像素焦距 fx/fy、聚焦中心 cx/cy、畸变系数 k1..k4(null=该档案未提供)。
       lensFx = d('fx');
@@ -960,9 +971,9 @@ class EditController extends ChangeNotifier {
       await _fetchGyroInfo(); // 外挂陀螺多为 raw IMU,回显朝向/积分方法
       await _fetchGyroTimeline(); // 刷新陀螺波形
       await _fetchPreviewStateOnce();
-      status = '✓ 已加载运动数据';
+      status = L.current.ctlMotionLoaded;
     } catch (e) {
-      status = '运动数据加载失败:$e';
+      status = L.current.ctlMotionLoadFailed('$e');
     } finally {
       _setBusy(false);
     }
@@ -983,7 +994,7 @@ class EditController extends ChangeNotifier {
       await _fetchLensInfo();
       await _fetchGyroInfo();
     } catch (e) {
-      status = '重载运动数据失败:$e';
+      status = L.current.ctlMotionReloadFailed('$e');
     } finally {
       _setBusy(false);
     }
@@ -1097,7 +1108,7 @@ class EditController extends ChangeNotifier {
     _autosyncClock
       ..reset()
       ..start();
-    status = '自动同步中…';
+    status = L.current.ctlAutosyncing;
     notifyListeners();
     debugPrint('[autosync] start maxPts=${params.maxSyncPoints} '
         'everyNth=${params.everyNthFrame} pose=${params.poseMethod} '
@@ -1122,7 +1133,7 @@ class EditController extends ChangeNotifier {
     } catch (e) {
       autosyncRunning = false;
       _autosyncClock.stop();
-      status = '自动同步失败:$e';
+      status = L.current.ctlAutosyncFailed('$e');
       notifyListeners();
     }
   }
@@ -1132,7 +1143,7 @@ class EditController extends ChangeNotifier {
     final u = uri;
     if (u == null || autosyncRunning) return;
     if (!hasLensProfile) {
-      status = '需先加载镜头档案才能自动同步';
+      status = L.current.ctlAutosyncNeedLens;
       notifyListeners();
       return;
     }
@@ -1201,8 +1212,9 @@ class EditController extends ChangeNotifier {
     _refreshPreview();
     await _fetchPreviewStateOnce();
     status = e.$3
-        ? '自动同步完成(${e.$2.length ~/ 2} 个同步点,中位偏移 ${e.$1.toStringAsFixed(1)} ms)'
-        : '自动同步未找到偏移';
+        ? L.current.ctlAutosyncComplete(
+            '${e.$2.length ~/ 2}', e.$1.toStringAsFixed(1))
+        : L.current.ctlAutosyncNoOffset;
     notifyListeners();
   }
 

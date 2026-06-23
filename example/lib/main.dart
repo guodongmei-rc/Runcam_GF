@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 
+import 'l10n/l10n.dart';
 import 'preview_page.dart';
 import 'preview_platformview_page.dart';
 
@@ -14,8 +16,22 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: HomePage(),
+    return MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: kSupportedLocales,
+      // 系统语言为简体中文 → 中文,其它一律英文(见 resolveAppLocale)。
+      localeListResolutionCallback: resolveAppLocale,
+      // 每次重建同步全局译文实例,供无 BuildContext 的状态层(EditController 等)读取。
+      builder: (context, child) {
+        L.current = AppLocalizations.of(context)!;
+        return child ?? const SizedBox.shrink();
+      },
+      home: const HomePage(),
     );
   }
 }
@@ -50,6 +66,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _runSmoke() async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       final uri = await _pickVideoUri();
       if (uri == null) return;
@@ -71,9 +88,10 @@ class _HomePageState extends State<HomePage> {
       setState(() => _status = msg);
       messenger.showSnackBar(SnackBar(content: Text(msg)));
     } on PlatformException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('smoke 失败: ${e.code} ${e.message}')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(l10n.homeSmokeFailedPlatform(e.code, e.message ?? ''))));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('smoke 失败: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.homeSmokeFailed('$e'))));
     }
   }
 
@@ -88,15 +106,18 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
+                final l10n = context.l10n;
                 try {
                   await RuncamGF.open();
                 } on PlatformException catch (e) {
                   messenger.showSnackBar(
-                    SnackBar(content: Text('打开失败: ${e.code} ${e.message}')),
+                    SnackBar(
+                        content:
+                            Text(l10n.homeOpenFailed(e.code, e.message ?? ''))),
                   );
                 }
               },
-              child: const Text('打开 Gyroflow 防抖'),
+              child: Text(context.l10n.homeOpenGyroflow),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -108,14 +129,14 @@ class _HomePageState extends State<HomePage> {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const PreviewPage()),
               ),
-              child: const Text('预览 Texture spike (dev)'),
+              child: Text(context.l10n.homePreviewTexture),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const PreviewPlatformViewPage()),
               ),
-              child: const Text('预览 PlatformView (dev)'),
+              child: Text(context.l10n.homePreviewPlatformView),
             ),
             const SizedBox(height: 16),
             Padding(

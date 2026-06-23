@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 import 'package:runcam_gf_example/edit/panels/stabilize_panel.dart';
+import 'package:runcam_gf_example/l10n/l10n.dart';
 
 /// 不接真引擎:空实现桥,只让 ParamsModel 能跑。
 class _NoopBridge implements EngineBridge {
@@ -12,13 +13,19 @@ class _NoopBridge implements EngineBridge {
   noSuchMethod(Invocation i) async => null; // 其余写方法吞掉
 }
 
+/// 测试宿主:提供本地化代理并强制中文,沿用既有中文断言(对齐简体中文显示)。
+Widget _host(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
+      home: Scaffold(body: child),
+    );
+
 void main() {
   testWidgets('拖平滑度滑块 → ParamsModel.smoothness 改变', (tester) async {
     final model = ParamsModel(_NoopBridge());
     final before = model.smoothness; // 默认 0.5
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: StabilizePanel(model: model)),
-    ));
+    await tester.pumpWidget(_host(StabilizePanel(model: model)));
     // 第一个 Slider = 平滑度(平滑方式是下拉,不是 Slider)。
     await tester.drag(find.byType(Slider).first, const Offset(200, 0));
     await tester.pump();
@@ -29,9 +36,7 @@ void main() {
 
   testWidgets('展开高级→勾按轴 → 露出 Pitch、隐藏总平滑度', (tester) async {
     final model = ParamsModel(_NoopBridge());
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: StabilizePanel(model: model)),
-    ));
+    await tester.pumpWidget(_host(StabilizePanel(model: model)));
     expect(find.byKey(const Key('stab_smoothness_pitch')), findsNothing);
     expect(find.byKey(const Key('stab_smoothness')), findsOneWidget);
     // 展开高级选项(第一个=平滑高级)→ 勾「按轴」。

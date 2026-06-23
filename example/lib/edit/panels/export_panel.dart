@@ -5,6 +5,7 @@ import 'package:runcam_gf/runcam_gf.dart'; // ParamsModelAdvanced 扩展(导出�
 import '../edit_controller.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
+import '../../l10n/l10n.dart';
 
 /// 「导出设置」面板(对齐官方 Export.qml 红框):编码器 / 输出大小(宽×高+锁定+预设)/
 /// 比特率 / 使用GPU编码 / 导出音频 / 高级选项(插值、音频编码、关键帧间隔)。
@@ -122,11 +123,11 @@ class _ExportPanelState extends State<ExportPanel> {
     final inW = c.videoInfo?.width ?? 16, inH = c.videoInfo?.height ?? 9;
     int even(num v) => (v.round() ~/ 2) * 2;
     final list = <({String label, int w, int h})>[
-      (label: '原始', w: inW, h: inH), // Original = 输入尺寸
+      (label: context.l10n.expSizeOriginal, w: inW, h: inH), // Original = 输入尺寸
     ];
     final scale = math.min(inW / g.wp, inH / g.hp);
     final pw = even(g.wp * scale), ph = even(g.hp * scale); // Proportional(取整,对齐官方 nw/nh)
-    list.add((label: '比例', w: pw, h: ph));
+    list.add((label: context.l10n.expSizeProportional, w: pw, h: ph));
     // 「基于最大缩放」已去掉:它依赖引擎在「降采样后的预览 output_size」上算出的 min_fov,
     // 与官方(全分辨率)不一致、两端也不一致,会误导用户。去掉,只留 原始/比例/固定尺寸。
     for (final p in g.fixed) {
@@ -159,8 +160,8 @@ class _ExportPanelState extends State<ExportPanel> {
             backgroundColor: GfColors.bgPanel,
             titlePadding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             contentPadding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            title: const Text('输出大小',
-                style: TextStyle(color: GfColors.text, fontSize: 15)),
+            title: Text(context.l10n.expOutputSize,
+                style: const TextStyle(color: GfColors.text, fontSize: 15)),
             content: SizedBox(
               width: 320,
               child: Column(
@@ -243,8 +244,8 @@ class _ExportPanelState extends State<ExportPanel> {
       return Container(
         color: GfColors.bgPanel,
         alignment: Alignment.center,
-        child: const Text('选视频后可设置导出',
-            style: TextStyle(color: GfColors.textSecondary)),
+        child: Text(context.l10n.expSelectVideoHint,
+            style: const TextStyle(color: GfColors.textSecondary)),
       );
     }
     _refillIfNeeded();
@@ -254,15 +255,15 @@ class _ExportPanelState extends State<ExportPanel> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         children: [
-          const Text('导出设置',
-              style: TextStyle(
+          Text(context.l10n.expTitle,
+              style: const TextStyle(
                   color: GfColors.text,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           // 编码器
           GyroDropdown(
-            label: '编码器',
+            label: context.l10n.expEncoder,
             options: _codecs.map((c) => c.name).toList(),
             value: m.exportCodecIndex.clamp(0, _codecs.length - 1),
             onChanged: (i) => setState(() => m.exportCodecIndex = i),
@@ -271,10 +272,10 @@ class _ExportPanelState extends State<ExportPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(children: [
-              const SizedBox(
+              SizedBox(
                   width: 70,
-                  child: Text('输出大小',
-                      style: TextStyle(
+                  child: Text(context.l10n.expOutputSize,
+                      style: const TextStyle(
                           color: GfColors.textSecondary, fontSize: 13))),
               Expanded(child: _numField(_w, _wf, readOnly: true)),
               const Padding(
@@ -295,10 +296,10 @@ class _ExportPanelState extends State<ExportPanel> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(children: [
-                const SizedBox(
+                SizedBox(
                     width: 70,
-                    child: Text('比特率',
-                        style: TextStyle(
+                    child: Text(context.l10n.expBitrate,
+                        style: const TextStyle(
                             color: GfColors.textSecondary, fontSize: 13))),
                 Expanded(child: _numField(_bitrate, _bf, decimal: false)),
                 const Padding(
@@ -310,18 +311,18 @@ class _ExportPanelState extends State<ExportPanel> {
               ]),
             ),
           // 导出音频(codec 不支持则禁用)
-          _check('导出音频', codec.audio && m.exportAudio,
+          _check(context.l10n.expAudio, codec.audio && m.exportAudio,
               enabled: codec.audio,
               onChanged: (v) => setState(() => m.exportAudio = v)),
           const Divider(height: 22),
           // 输出路径(目录显示 + 「…」选目录)。有几级显示几级,放不下自动换行。
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
               child: SizedBox(
                   width: 70,
-                  child: Text('输出路径',
-                      style: TextStyle(
+                  child: Text(context.l10n.expOutputPath,
+                      style: const TextStyle(
                           color: GfColors.textSecondary, fontSize: 13))),
             ),
             Expanded(
@@ -344,10 +345,10 @@ class _ExportPanelState extends State<ExportPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(children: [
-              const SizedBox(
+              SizedBox(
                   width: 70,
-                  child: Text('文件名',
-                      style: TextStyle(
+                  child: Text(context.l10n.expFileName,
+                      style: const TextStyle(
                           color: GfColors.textSecondary, fontSize: 13))),
               Expanded(
                 child: SizedBox(
@@ -376,7 +377,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 10),
           // 导出按钮(对齐官方 Render):无同步点确认 → 选目录授权 → 前台提示 → 导出。
           GyroBigButton(
-            label: c.exportRunning ? '取消导出' : '导出',
+            label: c.exportRunning ? context.l10n.expCancelExport : context.l10n.expExport,
             onPressed: (c.busy || c.uri == null)
                 ? null
                 : (c.exportRunning ? () => c.cancelExport() : _onExportTap),
@@ -390,18 +391,19 @@ class _ExportPanelState extends State<ExportPanel> {
 
   // 导出点击编排(对齐旧原生 exportStabilizedVideo → proceedExport → beginExport)。
   Future<void> _onExportTap() async {
+    final l10n = context.l10n;
     final ext = _codecs[m.exportCodecIndex.clamp(0, _codecs.length - 1)].ext;
     // 1) 无精确时间戳且无同步点 → 结果不准,先确认。
     if (!c.hasAccurateTimestamps && c.syncPointCount == 0) {
-      final go = await _confirm('不存在同步点',
-          '不存在同步点,您的结果将不正确。您确定要渲染此文件吗?',
-          okText: '是', cancelText: '否');
+      final go = await _confirm(l10n.expNoSyncTitle,
+          l10n.expNoSyncBody,
+          okText: l10n.expYes, cancelText: l10n.expNo);
       if (go != true) return;
     }
     // 2) 未选输出目录 → 提示后选目录(对齐原生「先授权再导出」)。
     if (!c.exportFolderChosen) {
-      final go = await _confirm('选择目标文件夹',
-          '由于文件访问限制,您需要手动选择目标文件夹。\n点击确定并选择目标文件夹。');
+      final go = await _confirm(l10n.expSelectFolderTitle,
+          l10n.expSelectFolderBody);
       if (go != true) return;
       await c.pickExportFolder();
       if (!c.exportFolderChosen) return; // 用户取消了选目录
@@ -413,16 +415,18 @@ class _ExportPanelState extends State<ExportPanel> {
     if (!mounted) return;
     if (err.isEmpty) {
       // 导出成功提示(对齐原生 Modal.Success「渲染完成。文件已写入: …」,仅「确定」)。
-      await _confirm('渲染完成',
-          '文件已写入:${c.exportFolderDisplay}/${c.exportFileName(ext)}',
-          okText: '确定');
+      await _confirm(context.l10n.expRenderDoneTitle,
+          context.l10n.expRenderDoneBody(
+              '${c.exportFolderDisplay}/${c.exportFileName(ext)}'),
+          okText: context.l10n.expOk);
     } else if (err != '已取消' && err != '忙') {
-      await _confirm('导出失败', err, okText: '确定');
+      await _confirm(context.l10n.expFailedTitle, err, okText: context.l10n.expOk);
     }
   }
 
   Future<bool?> _confirm(String title, String msg,
-      {String okText = '确定', String? cancelText}) {
+      {String? okText, String? cancelText}) {
+    final okLabel = okText ?? context.l10n.expOk;
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -439,7 +443,7 @@ class _ExportPanelState extends State<ExportPanel> {
                     style: const TextStyle(color: GfColors.textSecondary))),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(okText,
+              child: Text(okLabel,
                   style: const TextStyle(color: GfColors.accent))),
         ],
       ),
@@ -447,27 +451,28 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 
   Future<void> _foregroundHint() {
+    final l10n = context.l10n;
     return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: GfColors.bgPanel,
-        title: const Text('保持前台',
-            style: TextStyle(color: GfColors.text, fontSize: 15)),
-        content: const Text(
-            '将此 APP 保持在前台运行并不要锁定屏幕。\n受限于系统视频编码器,不支持后台渲染。',
-            style: TextStyle(color: GfColors.textSecondary, fontSize: 13)),
+        title: Text(l10n.expForegroundTitle,
+            style: const TextStyle(color: GfColors.text, fontSize: 15)),
+        content: Text(
+            l10n.expForegroundBody,
+            style: const TextStyle(color: GfColors.textSecondary, fontSize: 13)),
         actions: [
           TextButton(
               onPressed: () {
                 _foregroundHintShown = true;
                 Navigator.pop(ctx);
               },
-              child: const Text('不再显示',
-                  style: TextStyle(color: GfColors.textSecondary))),
+              child: Text(l10n.expDontShowAgain,
+                  style: const TextStyle(color: GfColors.textSecondary))),
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('确定',
-                  style: TextStyle(color: GfColors.accent))),
+              child: Text(l10n.expOk,
+                  style: const TextStyle(color: GfColors.accent))),
         ],
       ),
     );

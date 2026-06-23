@@ -3,6 +3,7 @@ import 'package:runcam_gf/runcam_gf.dart'; // ParamsModelAdvanced 扩展(同步�
 import '../edit_controller.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
+import '../../l10n/l10n.dart';
 
 /// 同步模块(对齐官方 Synchronization.qml):自动同步(+自动选点复选框) + 粗略偏移/搜索尺寸/
 /// 最大同步点数(输入框 + 各自复选框) + 「高级选项」展开(每N帧/每点时长/分辨率/光流/位姿/偏移/
@@ -28,7 +29,6 @@ class _SyncPanelState extends State<SyncPanel> {
   EditController get c => widget.controller;
   ParamsModel get m => widget.controller.params;
 
-  static const _resTitles = ['原生', '4K', '1080p', '720p', '480p'];
   static const _resValues = [0, 2160, 1080, 720, 480];
 
   @override
@@ -56,11 +56,12 @@ class _SyncPanelState extends State<SyncPanel> {
   @override
   Widget build(BuildContext context) {
     _refillIfNeeded();
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('同步',
-            style: TextStyle(
+        Text(l10n.syncTitle,
+            style: const TextStyle(
                 color: GfColors.text, fontSize: 15, fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
         // 自动同步按钮(居中)+ 后面「自动选点」复选框(auto_sync_points)。
@@ -72,7 +73,7 @@ class _SyncPanelState extends State<SyncPanel> {
                   ? null
                   : c.startAutosyncManual,
               icon: const Icon(Icons.sync, size: 16),
-              label: Text(c.autosyncRunning ? '同步中…' : '自动同步'),
+              label: Text(c.autosyncRunning ? l10n.syncSyncing : l10n.syncAutoSync),
               style: OutlinedButton.styleFrom(
                 foregroundColor: GfColors.accent,
                 side: const BorderSide(color: GfColors.accent),
@@ -84,7 +85,7 @@ class _SyncPanelState extends State<SyncPanel> {
           ],
         ),
         // 粗略大致偏移(秒,可负)+ 双向搜索复选框(initial_offset_inv)。
-        _numRow('粗略大致偏移', _offset, '秒', (s) {
+        _numRow(l10n.syncRoughGyroOffset, _offset, l10n.syncUnitSeconds, (s) {
           final v = double.tryParse(s.trim());
           if (v != null) m.gyroOffsetMs = v * 1000.0;
         }, _submitOffset,
@@ -92,14 +93,14 @@ class _SyncPanelState extends State<SyncPanel> {
             trailing: _check(m.checkNegativeInitialOffset,
                 (v) => setState(() => m.checkNegativeInitialOffset = v))),
         // 同步搜索尺寸(秒)+ 先粗后细复选框(calc_initial_fast)。
-        _numRow('同步搜索尺寸', _search, '秒', (s) {
+        _numRow(l10n.syncSearchSize, _search, l10n.syncUnitSeconds, (s) {
           final v = double.tryParse(s.trim());
           if (v != null) m.syncSearchSizeSec = v;
         }, _submitSearch,
             trailing: _check(m.calcInitialFast,
                 (v) => setState(() => m.calcInitialFast = v))),
         // 最大同步点数(整数,无复选框,对齐官方)。
-        _numRow('最大同步点数', _maxPts, '', (s) {
+        _numRow(l10n.syncMaxSyncPoints, _maxPts, '', (s) {
           final v = int.tryParse(s.trim());
           if (v != null) m.maxSyncPoints = v;
         }, _submitMaxPts, decimal: false),
@@ -112,8 +113,8 @@ class _SyncPanelState extends State<SyncPanel> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('高级选项',
-                      style: TextStyle(
+                  Text(l10n.syncAdvanced,
+                      style: const TextStyle(
                           color: GfColors.accent,
                           fontSize: 14,
                           fontWeight: FontWeight.w600)),
@@ -125,29 +126,29 @@ class _SyncPanelState extends State<SyncPanel> {
           ),
         ),
         if (_adv) ...[
-          _numRow('每 N 帧执行分析', _everyNth, '', (s) {
+          _numRow(l10n.syncEveryNthFrame, _everyNth, '', (s) {
             final v = int.tryParse(s.trim());
             if (v != null) m.everyNthFrame = v;
           }, _submitEveryNth, decimal: false),
-          _numRow('每个同步点分析时长', _timePer, '秒', (s) {
+          _numRow(l10n.syncTimePerSyncPoint, _timePer, l10n.syncUnitSeconds, (s) {
             final v = double.tryParse(s.trim());
             if (v != null) m.timePerSyncpointSec = v;
           }, _submitTimePer),
           GyroDropdown(
-            label: '处理分辨率',
-            options: _resTitles,
+            label: l10n.syncProcessingResolution,
+            options: [l10n.syncResNative, '4K', '1080p', '720p', '480p'],
             value: _resValues.indexOf(m.syncProcessingHeight).clamp(0, 4),
             onChanged: (i) => setState(() => m.syncProcessingHeight = _resValues[i]),
           ),
           // 光流方法去掉 AKAZE:下拉 [PyrLK, DIS] ↔ of_method [1, 2]。
           GyroDropdown(
-            label: '光流方法',
+            label: l10n.syncOpticalFlowMethod,
             options: const ['OpenCV (PyrLK)', 'OpenCV (DIS)'],
             value: m.ofMethod == 2 ? 1 : 0,
             onChanged: (i) => setState(() => m.ofMethod = i == 1 ? 2 : 1),
           ),
           GyroDropdown(
-            label: '位姿方法',
+            label: l10n.syncPoseMethod,
             options: const [
               'findEssentialMat',
               'Almeida',
@@ -158,13 +159,17 @@ class _SyncPanelState extends State<SyncPanel> {
             onChanged: (i) => setState(() => m.poseMethod = i),
           ),
           GyroDropdown(
-            label: '偏移方法',
-            options: const ['本质矩阵', '视觉功能', '卷帘快门同步'],
+            label: l10n.syncOffsetMethod,
+            options: [
+              l10n.syncOffsetEssentialMatrix,
+              l10n.syncOffsetVisualFeatures,
+              l10n.syncOffsetRsSync
+            ],
             value: m.offsetMethod.clamp(0, 2),
             onChanged: (i) => setState(() => m.offsetMethod = i),
           ),
           GyroCheck(
-            label: '低通滤波器',
+            label: l10n.syncLowPassFilter,
             value: m.imuLpfHz > 0,
             onChanged: (v) {
               setState(() => m.imuLpfHz = v ? 50.0 : 0.0);
@@ -173,17 +178,17 @@ class _SyncPanelState extends State<SyncPanel> {
           ),
           // 勾选低通时:下方显示滤波值输入框(Hz,clamp 0–500)。
           if (m.imuLpfHz > 0)
-            _numRow('滤波值', _lpf, 'Hz', (s) {
+            _numRow(l10n.syncFilterValue, _lpf, 'Hz', (s) {
               final v = double.tryParse(s.trim());
               if (v != null) m.imuLpfHz = v;
             }, _submitLpf),
           GyroCheck(
-            label: '显示检测到的特性',
+            label: l10n.syncShowDetectedFeatures,
             value: m.showDetectedFeatures,
             onChanged: (v) => setState(() => m.showDetectedFeatures = v),
           ),
           GyroCheck(
-            label: '显示光流',
+            label: l10n.syncShowOpticalFlow,
             value: m.showOpticalFlow,
             onChanged: (v) => setState(() => m.showOpticalFlow = v),
           ),

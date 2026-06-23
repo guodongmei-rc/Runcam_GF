@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:runcam_gf/runcam_gf.dart';
+import '../../l10n/l10n.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
 
@@ -30,21 +31,23 @@ class _StabilizePanelState extends State<StabilizePanel> {
       color: GfColors.bgPanel,
       child: AnimatedBuilder(
         animation: m,
-        builder: (context, _) => ListView(
+        builder: (context, _) {
+          final l10n = context.l10n;
+          return ListView(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: [
             // 同步模块:置于「平滑方式」之上(对齐官方右栏顺序 同步→稳定)。
             if (widget.trailing != null) widget.trailing!,
             // 稳定模块标题(与「同步」标题同款)。
-            const Text('稳定',
-                style: TextStyle(
+            Text(l10n.stabSection,
+                style: const TextStyle(
                     color: GfColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             GyroDropdown(
-              label: '平滑方式',
-              options: const ['无平滑', '默认', '纯3D', '固定摄像头'],
+              label: l10n.stabSmoothingMethod,
+              options: [l10n.stabNone, l10n.stabDefault, l10n.stabPlain3D, l10n.stabFixedCamera],
               value: m.smoothingMethod.clamp(0, 3),
               onChanged: (v) => m.smoothingMethod = v,
               onTitleDoubleTap:
@@ -54,7 +57,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
             if (!m.perAxis)
               GyroSlider(
                 key: const Key('stab_smoothness'),
-                label: '平滑度', unit: '%', min: 0, max: 100,
+                label: l10n.stabSmoothness, unit: '%', min: 0, max: 100,
                 value: m.smoothness * 100,
                 onChanged: (v) => m.smoothness = v / 100,
                 onTitleDoubleTap: _reset('smoothness', (v) => m.smoothness = v),
@@ -62,21 +65,21 @@ class _StabilizePanelState extends State<StabilizePanel> {
             else ...[
               GyroSlider(
                 key: const Key('stab_smoothness_pitch'),
-                label: 'Pitch 平滑度', unit: '%', min: 0, max: 100,
+                label: l10n.stabSmoothnessPitch, unit: '%', min: 0, max: 100,
                 value: m.smoothnessPitch * 100,
                 onChanged: (v) => m.smoothnessPitch = v / 100,
                 onTitleDoubleTap:
                     _reset('smoothnessPitch', (v) => m.smoothnessPitch = v),
               ),
               GyroSlider(
-                label: 'Yaw 平滑度', unit: '%', min: 0, max: 100,
+                label: l10n.stabSmoothnessYaw, unit: '%', min: 0, max: 100,
                 value: m.smoothnessYaw * 100,
                 onChanged: (v) => m.smoothnessYaw = v / 100,
                 onTitleDoubleTap:
                     _reset('smoothnessYaw', (v) => m.smoothnessYaw = v),
               ),
               GyroSlider(
-                label: 'Roll 平滑度', unit: '%', min: 0, max: 100,
+                label: l10n.stabSmoothnessRoll, unit: '%', min: 0, max: 100,
                 value: m.smoothnessRoll * 100,
                 onChanged: (v) => m.smoothnessRoll = v / 100,
                 onTitleDoubleTap:
@@ -84,31 +87,31 @@ class _StabilizePanelState extends State<StabilizePanel> {
               ),
             ],
             GyroAdvToggle(
-              label: '高级选项',
+              label: l10n.stabAdvanced,
               expanded: _advExpanded,
               onTap: () => setState(() => _advExpanded = !_advExpanded),
             ),
             if (_advExpanded) ...[
               GyroCheck(
                 key: const Key('stab_per_axis'),
-                label: '按轴',
+                label: l10n.stabPerAxis,
                 value: m.perAxis,
                 onChanged: (v) => m.perAxis = v,
               ),
               GyroCheck(
-                label: '仅限修剪范围内',
+                label: l10n.stabOnlyTrimRange,
                 value: m.trimRangeOnly,
                 onChanged: (v) => m.trimRangeOnly = v,
               ),
               GyroSlider(
-                label: '最大平滑度', unit: '秒', min: 0.1, max: 5, precision: 2,
+                label: l10n.stabMaxSmoothness, unit: l10n.stabUnitSec, min: 0.1, max: 5, precision: 2,
                 value: m.maxSmoothnessSec,
                 onChanged: (v) => m.maxSmoothnessSec = v,
                 onTitleDoubleTap:
                     _reset('maxSmoothnessSec', (v) => m.maxSmoothnessSec = v),
               ),
               GyroSlider(
-                label: '高速最大平滑度', unit: '秒', min: 0.01, max: 1, precision: 2,
+                label: l10n.stabMaxSmoothnessHighVel, unit: l10n.stabUnitSec, min: 0.01, max: 1, precision: 2,
                 value: m.alphaHighVelSec,
                 onChanged: (v) => m.alphaHighVelSec = v,
                 onTitleDoubleTap:
@@ -118,20 +121,20 @@ class _StabilizePanelState extends State<StabilizePanel> {
             const Divider(),
             GyroCheck(
               key: const Key('stab_horizon'),
-              label: '锁定地平线',
+              label: l10n.stabLockHorizon,
               value: m.horizonLock,
               onChanged: (v) => m.horizonLock = v,
             ),
             if (m.horizonLock) ...[
               GyroSlider(
-                label: '锁定量', unit: '%', min: 0, max: 100, precision: 0,
+                label: l10n.stabLockAmount, unit: '%', min: 0, max: 100, precision: 0,
                 value: m.horizonLockAmount, // 已是 0–100 百分比(默认 100)
                 onChanged: (v) => m.horizonLockAmount = v,
                 onTitleDoubleTap:
                     _reset('horizonLockAmount', (v) => m.horizonLockAmount = v),
               ),
               GyroSlider(
-                label: 'Roll 角度校正', unit: '°', min: -180, max: 180,
+                label: l10n.stabRollAngleCorrection, unit: '°', min: -180, max: 180,
                 value: m.horizonLockRoll,
                 onChanged: (v) => m.horizonLockRoll = v,
                 onTitleDoubleTap:
@@ -142,10 +145,12 @@ class _StabilizePanelState extends State<StabilizePanel> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                '最大旋转: Pitch ${m.maxAnglePitch.toStringAsFixed(1)}°, '
-                'Yaw ${m.maxAngleYaw.toStringAsFixed(1)}°, '
-                'Roll ${m.maxAngleRoll.toStringAsFixed(1)}°\n'
-                '最大缩放: ${(m.minFov > 0 ? 100 / m.minFov : 0).toStringAsFixed(1)}%',
+                l10n.stabMaxRotationZoom(
+                  m.maxAnglePitch.toStringAsFixed(1),
+                  m.maxAngleYaw.toStringAsFixed(1),
+                  m.maxAngleRoll.toStringAsFixed(1),
+                  (m.minFov > 0 ? 100 / m.minFov : 0).toStringAsFixed(1),
+                ),
                 style: const TextStyle(
                     color: GfColors.textMuted, fontSize: 12, height: 1.5),
               ),
@@ -154,14 +159,14 @@ class _StabilizePanelState extends State<StabilizePanel> {
             // 官方 zh_CN 措辞「无缩放/动态缩放/静态缩放」)。去掉前置标题,整行下拉。
             GyroDropdown(
               label: '',
-              options: const ['无缩放', '动态缩放', '静态缩放'],
+              options: [l10n.stabNoZooming, l10n.stabDynamicZooming, l10n.stabStaticZoom],
               value: m.croppingMode.clamp(0, 2),
               onChanged: (v) => m.croppingMode = v,
             ),
             // 缩放限制:仅动态/静态缩放(method 1/2)显示。
             if (m.croppingMode != 0)
               GyroSlider(
-                label: '缩放限制', unit: '%', min: 100, max: 300, precision: 0,
+                label: l10n.stabZoomLimit, unit: '%', min: 100, max: 300, precision: 0,
                 value: m.maxZoomPercent,
                 onChanged: (v) => m.maxZoomPercent = v,
                 onTitleDoubleTap:
@@ -170,14 +175,14 @@ class _StabilizePanelState extends State<StabilizePanel> {
             // 缩放速度:仅动态缩放(croppingMode==1)显示。
             if (m.croppingMode == 1)
               GyroSlider(
-                label: '缩放速度', unit: '秒', min: 0.1, max: 15, precision: 2,
+                label: l10n.stabZoomingSpeed, unit: l10n.stabUnitSec, min: 0.1, max: 15, precision: 2,
                 value: m.adaptiveZoomSec,
                 onChanged: (v) => m.adaptiveZoomSec = v,
                 onTitleDoubleTap:
                     _reset('adaptiveZoomSec', (v) => m.adaptiveZoomSec = v),
               ),
             GyroSlider(
-              label: '镜头校正', unit: '%', min: 0, max: 100, precision: 0,
+              label: l10n.stabLensCorrection, unit: '%', min: 0, max: 100, precision: 0,
               value: m.lensCorrection * 100,
               onChanged: (v) => m.lensCorrection = v / 100,
               onTitleDoubleTap:
@@ -185,25 +190,25 @@ class _StabilizePanelState extends State<StabilizePanel> {
             ),
             // ===== 第二个高级选项区(缩放/卷帘/视频速度/附加3D旋转)=====
             GyroAdvToggle(
-              label: '高级选项',
+              label: l10n.stabAdvanced,
               expanded: _adv2,
               onTap: () => setState(() => _adv2 = !_adv2),
             ),
             if (_adv2) ...[
               GyroSlider(
-                label: '视场角', min: 0.3, max: 3, precision: 2,
+                label: l10n.stabFov, min: 0.3, max: 3, precision: 2,
                 value: m.fov,
                 onChanged: (v) => m.fov = v,
                 onTitleDoubleTap: _reset('fov', (v) => m.fov = v),
               ),
               GyroCheck(
-                label: '卷帘快门校正',
+                label: l10n.stabRollingShutter,
                 value: m.rsCorrection,
                 onChanged: (v) => m.rsCorrection = v,
               ),
               if (m.rsCorrection)
                 GyroSlider(
-                  label: '帧读出时间', unit: '毫秒', min: 0, max: 50, precision: 2,
+                  label: l10n.stabFrameReadoutTime, unit: l10n.stabUnitMs, min: 0, max: 50, precision: 2,
                   value: m.frameReadoutMs,
                   onChanged: (v) => m.frameReadoutMs = v,
                   trailing: _readoutDirInline(), // 行尾:读出方向按钮
@@ -211,7 +216,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
                       _reset('frameReadoutMs', (v) => m.frameReadoutMs = v),
                 ),
               GyroSlider(
-                label: '视频速度', unit: '%', min: 10, max: 1000, precision: 0,
+                label: l10n.stabVideoSpeed, unit: '%', min: 10, max: 1000, precision: 0,
                 value: m.videoSpeed * 100,
                 onChanged: (v) => m.videoSpeed = v / 100,
                 trailing: _linkChecksInline(), // 行尾:三个链接复选框
@@ -219,7 +224,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
               ),
               if (m.croppingMode == 1)
                 GyroDropdown(
-                  label: '缩放方式',
+                  label: l10n.stabZoomingMethod,
                   options: const ['Gaussian filter', 'Envelope follower'],
                   value: m.zoomingMethod.clamp(0, 1),
                   onChanged: (v) => m.zoomingMethod = v,
@@ -246,7 +251,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
               ),
               if (m.croppingMode != 0)
                 GyroSlider(
-                  label: '缩放限额迭代次数', min: 1, max: 15, precision: 0,
+                  label: l10n.stabZoomLimitIterations, min: 1, max: 15, precision: 0,
                   value: m.maxZoomIterations.toDouble(),
                   onChanged: (v) => m.maxZoomIterations = v.round(),
                   onTitleDoubleTap: _reset(
@@ -254,7 +259,8 @@ class _StabilizePanelState extends State<StabilizePanel> {
                 ),
             ],
           ],
-        ),
+        );
+        },
       ),
     );
   }
@@ -265,7 +271,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
     if (lv == null || !lv.containsKey(key)) return null;
     return () {
       setRaw(lv[key]!);
-      _toast('已恢复加载值');
+      _toast(context.l10n.stabRestoredLoadedValues);
     };
   }
 
@@ -281,14 +287,20 @@ class _StabilizePanelState extends State<StabilizePanel> {
 
   // 帧读出方向:行尾小方按钮,箭头随方向旋转([0,180,-90,90]°),点击循环 + toast。
   Widget _readoutDirInline() {
-    const names = ['上→下', '下→上', '左→右', '右→左'];
+    final l10n = context.l10n;
+    final names = [
+      l10n.stabReadoutDirTopBottom,
+      l10n.stabReadoutDirBottomTop,
+      l10n.stabReadoutDirLeftRight,
+      l10n.stabReadoutDirRightLeft,
+    ];
     const anglesDeg = [0.0, 180.0, -90.0, 90.0];
     final dir = m.frameReadoutDirection.clamp(0, 3);
     return GestureDetector(
       onTap: () {
         final next = (m.frameReadoutDirection + 1) % 4;
         m.frameReadoutDirection = next;
-        _toast('帧读出方向:${names[next]}');
+        _toast(l10n.stabFrameReadoutDirToast(names[next]));
       },
       child: Container(
         width: 28,
@@ -307,25 +319,29 @@ class _StabilizePanelState extends State<StabilizePanel> {
   }
 
   // 视频速度链接:行尾三个小复选框(无标签,对齐官方),切换 + toast。
-  Widget _linkChecksInline() => Row(
+  Widget _linkChecksInline() {
+    final l10n = context.l10n;
+    return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _miniCheck('链接平滑', m.videoSpeedAffectsSmoothing,
+          _miniCheck(l10n.stabLinkSmoothing, m.videoSpeedAffectsSmoothing,
               (v) => m.videoSpeedAffectsSmoothing = v),
           const SizedBox(width: 4),
-          _miniCheck('链接缩放速度', m.videoSpeedAffectsZooming,
+          _miniCheck(l10n.stabLinkZoomingSpeed, m.videoSpeedAffectsZooming,
               (v) => m.videoSpeedAffectsZooming = v),
           const SizedBox(width: 4),
-          _miniCheck('链接缩放限制', m.videoSpeedAffectsZoomingLimit,
+          _miniCheck(l10n.stabLinkZoomingLimit, m.videoSpeedAffectsZoomingLimit,
               (v) => m.videoSpeedAffectsZoomingLimit = v),
         ],
       );
+  }
 
   Widget _miniCheck(String label, bool value, ValueChanged<bool> onChanged) =>
       GestureDetector(
         onTap: () {
           onChanged(!value);
-          _toast('$label:${!value ? "已开启" : "已关闭"}');
+          _toast(context.l10n.stabLinkToggleToast(
+              label, !value ? context.l10n.stabEnabled : context.l10n.stabDisabled));
         },
         child: Container(
           width: 18,

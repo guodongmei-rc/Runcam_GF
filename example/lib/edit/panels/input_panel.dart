@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../l10n/l10n.dart';
 import '../edit_controller.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
@@ -197,16 +198,17 @@ class _InputPanelState extends State<InputPanel> {
         ? (vi!.audioSampleRate != null && vi.audioSampleRate! > 0
             ? '${vi.audioCodec} ${vi.audioSampleRate} Hz'
             : vi.audioCodec!)
-        : (loaded ? '无' : '---');
+        : (loaded ? context.l10n.inputNone : '---');
     final rot = vi?.rotationDeg != null ? '${vi!.rotationDeg}°' : '---';
     return [
-      _title('视频信息'),
+      _title(context.l10n.inputVideoInfo),
       const SizedBox(height: 10),
       // 与「运动数据」下的打开文件按钮一致:居中、宽 180、同款 _primaryButton。
       Center(
         child: SizedBox(
           width: 180,
-          child: _primaryButton('打开文件', c.busy ? null : c.openAndStart),
+          child: _primaryButton(
+              context.l10n.inputOpenFile, c.busy ? null : c.openAndStart),
         ),
       ),
       // 缺运动数据/镜头档案时:蓝色可点提示框,引导授权目录后自动扫描 sidecar(对齐原生)。
@@ -215,17 +217,18 @@ class _InputPanelState extends State<InputPanel> {
         _dirHintBox(),
       ],
       const SizedBox(height: 6),
-      _row('文件名称', c.videoName ?? '---'),
-      _row('检测到的相机', c.detectedCamera ?? '---'),
-      _row('检测镜头', c.detectedLens ?? '---'),
-      _row('尺寸', size),
-      _row('时长', dur),
-      _row('帧速率', fps),
-      _row('编码解码器', codec),
-      _row('像素格式', pix),
-      _row('音频', audio),
-      _row('旋转', rot),
-      _row('包含陀螺仪数据', loaded ? (c.hasGyro ? 'Yes' : 'No') : '---'),
+      _row(context.l10n.inputFileName, c.videoName ?? '---'),
+      _row(context.l10n.inputDetectedCamera, c.detectedCamera ?? '---'),
+      _row(context.l10n.inputDetectedLens, c.detectedLens ?? '---'),
+      _row(context.l10n.inputDimensions, size),
+      _row(context.l10n.inputDuration, dur),
+      _row(context.l10n.inputFrameRate, fps),
+      _row(context.l10n.inputCodec, codec),
+      _row(context.l10n.inputPixelFormat, pix),
+      _row(context.l10n.inputAudio, audio),
+      _row(context.l10n.inputRotation, rot),
+      _row(context.l10n.inputContainsGyro,
+          loaded ? (c.hasGyro ? 'Yes' : 'No') : '---'),
       ..._recordingRows(c.recordingSettings),
     ];
   }
@@ -240,10 +243,11 @@ class _InputPanelState extends State<InputPanel> {
             color: const Color(0xFF1E5BB8), // 蓝底(对齐官方 InfoMessageSmall)
             borderRadius: BorderRadius.circular(6),
           ),
-          child: const Text(
-            '为检测项目文件、视频序列或图像序列，请点击此处选择带有输入文件的目录。',
+          child: Text(
+            context.l10n.inputDirHint,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 12, height: 1.4),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 12, height: 1.4),
           ),
         ),
       );
@@ -256,16 +260,17 @@ class _InputPanelState extends State<InputPanel> {
           color: const Color(0xFFF0A030), // 橙色警告底(对齐官方 InfoMessageSmall warning)
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
-          '镜头配置文件的尺寸与当前文件不符。结果看起来可能会不正确。',
+        child: Text(
+          context.l10n.inputLensMismatch,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFF1A1A1A), fontSize: 12, height: 1.4),
+          style: const TextStyle(
+              color: Color(0xFF1A1A1A), fontSize: 12, height: 1.4),
         ),
       );
 
   // ---- 镜头配置文件 ----
   List<Widget> _lensProfile() => [
-        _title('镜头配置文件'),
+        _title(context.l10n.inputLensProfile),
         const SizedBox(height: 10),
         // 搜索框(回车搜索内置镜头库)。
         TextField(
@@ -274,7 +279,7 @@ class _InputPanelState extends State<InputPanel> {
           style: const TextStyle(color: GfColors.text, fontSize: 14),
           textInputAction: TextInputAction.done, // 键盘右下角显示「完成」
           decoration: InputDecoration(
-            hintText: '搜索镜头…',
+            hintText: context.l10n.inputSearchLens,
             hintStyle: const TextStyle(color: GfColors.textSecondary),
             isDense: true,
             filled: true,
@@ -310,7 +315,8 @@ class _InputPanelState extends State<InputPanel> {
         ],
         const SizedBox(height: 10),
         // (「当前镜头」标题 + 镜头名已按需求去掉,直接显示镜头信息行。)
-        for (final e in c.lensInfo.entries) _row(e.key, e.value),
+        // lensInfo 的键为稳定标识符,_lensLabel 翻译成本地化标签后显示。
+        for (final e in c.lensInfo.entries) _row(_lensLabel(e.key), e.value),
         // 镜头配置文件「打开文件 / 创建新的」按钮后续再做,先去掉。
         const SizedBox(height: 18),
         ..._lensAdvanced(),
@@ -329,8 +335,8 @@ class _InputPanelState extends State<InputPanel> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '高级',
-                  style: TextStyle(
+                  context.l10n.inputAdvanced,
+                  style: const TextStyle(
                     color: GfColors.accent,
                     fontSize: 14,
                     decoration: TextDecoration.underline,
@@ -347,15 +353,15 @@ class _InputPanelState extends State<InputPanel> {
       if (_advancedOpen) ...[
         const SizedBox(height: 6),
         GyroCheck(
-          label: '水下镜头',
+          label: context.l10n.inputUnderwaterLens,
           value: c.underwaterLens,
           onChanged: (v) => setState(() => c.underwaterLens = v),
         ),
-        _fieldLabel('像素焦距'),
+        _fieldLabel(context.l10n.inputPixelFocalLength),
         _twoField(_fx, (v) => c.lensFx = v, _fy, (v) => c.lensFy = v),
-        _fieldLabel('聚焦中心'),
+        _fieldLabel(context.l10n.inputFocalCenter),
         _twoField(_cx, (v) => c.lensCx = v, _cy, (v) => c.lensCy = v),
-        _fieldLabel('畸变系数'),
+        _fieldLabel(context.l10n.inputDistortionCoeffs),
         _twoField(_d0, (v) => _setDist(0, v), _d1, (v) => _setDist(1, v)),
         const SizedBox(height: 10),
         _twoField(_d2, (v) => _setDist(2, v), _d3, (v) => _setDist(3, v)),
@@ -411,23 +417,24 @@ class _InputPanelState extends State<InputPanel> {
 
   // ---- 运动数据 ----
   List<Widget> _motionData() => [
-        _title('运动数据'),
+        _title(context.l10n.inputMotionData),
         const SizedBox(height: 10),
         Center(
           child: SizedBox(
             width: 180,
-            child: _primaryButton(
-                '打开文件', (c.busy || c.uri == null) ? null : c.openMotionFile),
+            child: _primaryButton(context.l10n.inputOpenFile,
+                (c.busy || c.uri == null) ? null : c.openMotionFile),
           ),
         ),
         const SizedBox(height: 8),
-        _row('检测到的格式', c.motionFormat ?? c.detectedCamera ?? '---'),
-        _row('文件名称', c.motionFileName ?? c.videoName ?? '---'),
+        _row(context.l10n.inputDetectedFormat,
+            c.motionFormat ?? c.detectedCamera ?? '---'),
+        _row(context.l10n.inputFileName, c.motionFileName ?? c.videoName ?? '---'),
         const SizedBox(height: 4),
         // 加载全部元数据 + 帧偏移:仅手动加载外挂运动数据后显示(对齐原生可见条件)。
         if (c.hasExternalMotion) ...[
           GyroCheck(
-              label: '加载全部元数据',
+              label: context.l10n.inputLoadAllMetadata,
               value: c.loadAllMetadata,
               onChanged: c.setLoadAllMetadata),
           _frameOffsetRow(),
@@ -442,7 +449,7 @@ class _InputPanelState extends State<InputPanel> {
         _integrationDropdown(),
         const SizedBox(height: 4),
         GyroCheck(
-            label: '方向指示器',
+            label: context.l10n.inputOrientationIndicator,
             value: c.orientationIndicator,
             onChanged: c.setOrientationIndicator),
         if (c.orientationIndicator) ...[
@@ -452,17 +459,19 @@ class _InputPanelState extends State<InputPanel> {
       ];
 
   // 帧偏移(可负;关=0)→ 引擎 + recompute。
-  Widget _frameOffsetRow() => _expandCheck('帧偏移', _frameOffsetOn, (v) {
+  Widget _frameOffsetRow() =>
+      _expandCheck(context.l10n.inputFrameOffset, _frameOffsetOn, (v) {
         setState(() => _frameOffsetOn = v);
         c.setFrameOffset(v ? (int.tryParse(_frameOffset.text.trim()) ?? 0) : 0);
       },
-          child: _unitField(_frameOffset, '帧',
+          child: _unitField(_frameOffset, context.l10n.inputUnitFrames,
               kbd: const TextInputType.numberWithOptions(signed: true),
               formatters: numFormatters(decimal: false, negative: true),
               onSubmitted: (s) => c.setFrameOffset(int.tryParse(s.trim()) ?? 0)));
 
   // 低通滤波器 + Hz(默认 50)→ params(自带 push+recompute)。
-  Widget _lpfRow() => _expandCheck('低通滤波器', c.imuLpfOn, (v) {
+  Widget _lpfRow() =>
+      _expandCheck(context.l10n.inputLowPassFilter, c.imuLpfOn, (v) {
         c.setImuLpfHz(v ? (double.tryParse(_lpfHz.text.trim()) ?? 50.0) : 0.0);
         setState(() {}); // imuLpfOn 由 params 决定,强制读新值刷选中态
       },
@@ -485,7 +494,8 @@ class _InputPanelState extends State<InputPanel> {
               }));
 
   // 旋转 Pitch/Roll/Yaw:接引擎。取消=全 0。
-  Widget _rotationRow() => _expandCheck('旋转', _rotationOn, (v) {
+  Widget _rotationRow() =>
+      _expandCheck(context.l10n.inputRotation, _rotationOn, (v) {
         setState(() => _rotationOn = v);
         v
             ? c.setImuRotation(_d(_rotPitch), _d(_rotRoll), _d(_rotYaw))
@@ -500,7 +510,8 @@ class _InputPanelState extends State<InputPanel> {
           }));
 
   // 陀螺仪偏差 X/Y/Z:接引擎。取消=全 0。
-  Widget _gyroBiasRow() => _expandCheck('陀螺仪偏差', _biasOn, (v) {
+  Widget _gyroBiasRow() =>
+      _expandCheck(context.l10n.inputGyroBias, _biasOn, (v) {
         setState(() => _biasOn = v);
         v
             ? c.setImuBias(_d(_biasX), _d(_biasY), _d(_biasZ))
@@ -616,7 +627,7 @@ class _InputPanelState extends State<InputPanel> {
     final ffi = c.integrationMethod;
     final pos = (hasQ ? ffi : ffi - 1).clamp(0, names.length - 1);
     return GyroDropdown(
-      label: '积分方法',
+      label: context.l10n.inputIntegrationMethod,
       options: names,
       value: pos,
       onChanged: (p) => c.setIntegration(hasQ ? p : p + 1),
@@ -624,10 +635,11 @@ class _InputPanelState extends State<InputPanel> {
   }
 
   Widget _imuOrientationRow() => Row(children: [
-        const SizedBox(
+        SizedBox(
             width: 104,
-            child: Text('IMU 朝向',
-                style: TextStyle(color: GfColors.textSecondary, fontSize: 13))),
+            child: Text(context.l10n.inputImuOrientation,
+                style: const TextStyle(
+                    color: GfColors.textSecondary, fontSize: 13))),
         Expanded(
           child: TextField(
             controller: _imu,
@@ -648,31 +660,77 @@ class _InputPanelState extends State<InputPanel> {
         ),
       ]);
 
+  // lensInfo 的稳定标识键 → 本地化标签(对齐桌面 LensProfile 信息行)。
+  String _lensLabel(String id) {
+    final l = context.l10n;
+    switch (id) {
+      case 'camera':
+        return l.inputLensCamera;
+      case 'lens':
+        return l.inputLensLens;
+      case 'setting':
+        return l.inputLensSetting;
+      case 'note':
+        return l.inputLensNote;
+      case 'dimensions':
+        return l.inputLensDimensions;
+      case 'calibratedBy':
+        return l.inputLensCalibratedBy;
+      default:
+        return id;
+    }
+  }
+
   // ---- recording_settings 行 ----
+  // 元数据键(英文,来自 telemetry)按此顺序显示;再补未在表内的其它键。
+  static const List<String> _recordingKeys = [
+    'Focal length', 'Focus mode', 'Iris', 'ISO', 'Shutter angle', //
+    'Shutter speed', 'Exposure', 'White balance mode', 'White balance', //
+    'Color primaries', 'Gamma equation',
+  ];
+
+  // recording_settings 元数据键 → 本地化标签。
+  String _recordingLabel(String key) {
+    final l = context.l10n;
+    switch (key) {
+      case 'Focal length':
+        return l.inputRsFocalLength;
+      case 'Focus mode':
+        return l.inputRsFocusMode;
+      case 'Iris':
+        return l.inputRsIris;
+      case 'ISO':
+        return l.inputRsIso;
+      case 'Shutter angle':
+        return l.inputRsShutterAngle;
+      case 'Shutter speed':
+        return l.inputRsShutterSpeed;
+      case 'Exposure':
+        return l.inputRsExposure;
+      case 'White balance mode':
+        return l.inputRsWhiteBalanceMode;
+      case 'White balance':
+        return l.inputRsWhiteBalance;
+      case 'Color primaries':
+        return l.inputRsColorPrimaries;
+      case 'Gamma equation':
+        return l.inputRsGammaEquation;
+      default:
+        return key;
+    }
+  }
+
   List<Widget> _recordingRows(Map<String, String> rs) {
     if (rs.isEmpty) return const [];
-    const mapping = <String, String>{
-      'Focal length': '焦距',
-      'Focus mode': '对焦模式',
-      'Iris': '光圈',
-      'ISO': 'ISO',
-      'Shutter angle': '快门角',
-      'Shutter speed': '快门速度',
-      'Exposure': '曝光度',
-      'White balance mode': '白平衡模式',
-      'White balance': '白平衡',
-      'Color primaries': '基色',
-      'Gamma equation': '伽玛方程',
-    };
     final rows = <Widget>[];
     final shown = <String>{};
-    mapping.forEach((key, label) {
+    for (final key in _recordingKeys) {
       final v = rs[key];
       if (v != null && v.isNotEmpty) {
-        rows.add(_row(label, v));
+        rows.add(_row(_recordingLabel(key), v));
         shown.add(key);
       }
-    });
+    }
     rs.forEach((k, v) {
       if (!shown.contains(k) && v.isNotEmpty) rows.add(_row(k, v));
     });

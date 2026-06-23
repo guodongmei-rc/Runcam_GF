@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart'; // ParamsModel 扩展 getter(fov)
 import 'edit_controller.dart';
 import 'preview_backend.dart';
+import '../l10n/l10n.dart';
 
 /// 只负责"显示共享 stabilizer 的输出" + 预览 HUD(时间/帧号 + 缩放%)。
 /// 不引用 ParamsModel / 任何参数;HUD 数据从 controller 的只读 getter 取。
@@ -14,7 +15,7 @@ class PreviewView extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller;
     if (c.uri == null) {
-      return const Center(child: Text('未选视频'));
+      return Center(child: Text(context.l10n.pviewNoVideo));
     }
     // 稳定概览裁切框比例:概览 fov=base+1,输出区=中央 base/(base+1)(自适应缩放抵消)。
     final fov = c.params.fov;
@@ -130,7 +131,7 @@ class _Hud extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 11),
             ),
             Text(
-              '缩放: $zoomStr',
+              context.l10n.pviewZoom(zoomStr),
               style: const TextStyle(
                   color: Color(0xFFFFA500),
                   fontSize: 11,

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'l10n/l10n.dart';
 import 'edit/edit_controller.dart';
 import 'edit/gyro_widgets.dart';
 import 'edit/gyroflow_theme.dart';
@@ -57,7 +58,7 @@ class _PreviewPageState extends State<PreviewPage>
         children: [
           SafeArea(child: _bodyColumn()),
           // 加载视频蒙版(转圈)。
-          if (_c.busy) _busyOverlay('加载视频中…'),
+          if (_c.busy) _busyOverlay(context.l10n.prevLoadingVideo),
           // 自动同步蒙版「分析中…」(对齐原生 syncOverlay)。
           if (_c.autosyncRunning) _autosyncOverlay(),
           // 导出蒙版「导出中…」(对齐原生导出进度遮罩)。
@@ -87,7 +88,7 @@ class _PreviewPageState extends State<PreviewPage>
                 if (defaultTargetPlatform != TargetPlatform.android)
                   TextButton(
                     onPressed: _c.uri == null || _c.busy ? null : _c.switchBackend,
-                    child: Text('切到 ${_c.backend.other.label}',
+                    child: Text(context.l10n.prevSwitchTo(_c.backend.other.label),
                         style: const TextStyle(color: GfColors.accent)),
                   ),
                 const SizedBox(width: 4),
@@ -124,27 +125,27 @@ class _PreviewPageState extends State<PreviewPage>
                 children: [
                   _ctrlBtn(
                     icon: _c.playing ? Icons.pause : Icons.play_arrow,
-                    label: _c.playing ? '暂停' : '播放',
+                    label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
                     active: _c.playing,
                     onTap: _c.uri == null ? null : _c.togglePlay,
                   ),
                   const SizedBox(width: 8),
                   _ctrlBtn(
                     icon: Icons.crop_free,
-                    label: '稳定概览',
+                    label: context.l10n.prevStabOverview,
                     active: _c.fovOverview,
                     onTap: _c.uri == null ? null : _c.toggleFovOverview,
                   ),
                   const SizedBox(width: 8),
                   _ctrlBtn(
                     icon: Icons.auto_fix_high,
-                    label: '防抖',
+                    label: context.l10n.prevStabilization,
                     active: _c.stabEnabled,
                     onTap: _c.uri == null ? null : _c.toggleStab,
                   ),
                   const SizedBox(width: 8),
                   _ctrlBtn(
-                    icon: Icons.wallpaper,
+                    icon: _bgModeIcon(_c.backgroundMode),
                     label: _c.backgroundModeName,
                     active: false,
                     onTap: _c.uri == null
@@ -152,7 +153,7 @@ class _PreviewPageState extends State<PreviewPage>
                         : () {
                             _c.cycleBackgroundMode();
                             if (!_c.fovOverview) {
-                              _toast('打开稳定概览才能更好的预览效果');
+                              _toast(context.l10n.prevEnableOverviewHint);
                             }
                           },
                   ),
@@ -163,10 +164,10 @@ class _PreviewPageState extends State<PreviewPage>
             GyroTabBar(
               index: _tab,
               onChanged: (i) => setState(() => _tab = i),
-              tabs: const [
-                (icon: Icons.videocam_outlined, label: '输入'),
-                (icon: Icons.settings_outlined, label: '参数'),
-                (icon: Icons.file_download_outlined, label: '导出'),
+              tabs: [
+                (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
+                (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
+                (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
               ],
             ),
             // Tab 内容。
@@ -175,7 +176,8 @@ class _PreviewPageState extends State<PreviewPage>
         );
   }
 
-  // 预览控制按钮(图标+标签):激活=橙底白字,未激活=描边,禁用=灰。
+  // 预览控制按钮(只用图标,不放文字):激活=橙底白字,未激活=描边,禁用=灰。
+  // [label] 不再可见,仅作无障碍语义(随系统语言本地化)。
   Widget _ctrlBtn(
       {required IconData icon,
       required String label,
@@ -186,31 +188,41 @@ class _PreviewPageState extends State<PreviewPage>
         ? GfColors.textSecondary
         : (active ? Colors.white : GfColors.accent);
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active && enabled ? GfColors.accent : Colors.transparent,
-            border: Border.all(
-                color: enabled ? GfColors.accent : GfColors.textSecondary),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: fg),
-              const SizedBox(height: 2),
-              Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: fg, fontSize: 11)),
-            ],
+      child: Semantics(
+        label: label,
+        button: true,
+        enabled: enabled,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active && enabled ? GfColors.accent : Colors.transparent,
+              border: Border.all(
+                  color: enabled ? GfColors.accent : GfColors.textSecondary),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: fg),
           ),
         ),
       ),
     );
+  }
+
+  // 背景模式图标(对齐 setBackgroundMode 0..3):纯色 / 重复边缘像素 / 镜像边缘像素 / 羽化留边。
+  // 单按钮循环切换,靠图标区分模式(不放文字)。
+  IconData _bgModeIcon(int mode) {
+    switch (mode) {
+      case 1: // 重复边缘像素
+        return Icons.blur_linear;
+      case 2: // 镜像边缘像素
+        return Icons.flip;
+      case 3: // 羽化留边
+        return Icons.gradient;
+      default: // 0 纯色
+        return Icons.format_color_fill;
+    }
   }
 
   // 浮动 toast(清掉旧的不堆积)。
@@ -281,16 +293,21 @@ class _PreviewPageState extends State<PreviewPage>
               ),
             ),
             const SizedBox(height: 14),
-            Text('分析中 $pct%... (${_c.autosyncReady}/${_c.autosyncTotal} @ ${fps}fps)',
+            Text(
+                context.l10n.prevAnalyzing(pct, '${_c.autosyncReady}',
+                    '${_c.autosyncTotal}', fps),
                 style: const TextStyle(color: GfColors.text, fontSize: 14)),
             const SizedBox(height: 6),
-            Text('耗时: ${_c.autosyncElapsedSec}秒, 剩余: ${_c.autosyncRemainingSec}秒',
+            Text(
+                context.l10n.prevElapsedRemaining(
+                    '${_c.autosyncElapsedSec}', '${_c.autosyncRemainingSec}'),
                 style:
                     const TextStyle(color: GfColors.textSecondary, fontSize: 12)),
             const SizedBox(height: 10),
             TextButton(
               onPressed: _c.cancelAutosync,
-              child: const Text('取消', style: TextStyle(color: GfColors.accent)),
+              child: Text(context.l10n.prevCancel,
+                  style: const TextStyle(color: GfColors.accent)),
             ),
           ],
         ),
@@ -324,16 +341,21 @@ class _PreviewPageState extends State<PreviewPage>
               ),
             ),
             const SizedBox(height: 14),
-            Text('导出中 $pct%... (${_c.exportFrame}/${_c.exportTotal} @ ${fps}fps)',
+            Text(
+                context.l10n.prevExporting(pct, '${_c.exportFrame}',
+                    '${_c.exportTotal}', fps),
                 style: const TextStyle(color: GfColors.text, fontSize: 14)),
             const SizedBox(height: 6),
-            Text('耗时: ${_c.exportElapsedSec}秒, 剩余: ${_c.exportRemainingSec}秒',
+            Text(
+                context.l10n.prevElapsedRemaining(
+                    '${_c.exportElapsedSec}', '${_c.exportRemainingSec}'),
                 style:
                     const TextStyle(color: GfColors.textSecondary, fontSize: 12)),
             const SizedBox(height: 10),
             TextButton(
               onPressed: _c.cancelExport,
-              child: const Text('取消', style: TextStyle(color: GfColors.accent)),
+              child: Text(context.l10n.prevCancel,
+                  style: const TextStyle(color: GfColors.accent)),
             ),
           ],
         ),
@@ -347,9 +369,9 @@ class _PreviewPageState extends State<PreviewPage>
         return InputPanel(controller: _c);
       case 1:
         return _c.uri == null
-            ? const Center(
-                child: Text('选视频后可调参',
-                    style: TextStyle(color: GfColors.textSecondary)))
+            ? Center(
+                child: Text(context.l10n.prevSelectVideoHint,
+                    style: const TextStyle(color: GfColors.textSecondary)))
             : StabilizePanel(
                 model: _c.params,
                 trailing: SyncPanel(controller: _c), // 参数下方:同步模块

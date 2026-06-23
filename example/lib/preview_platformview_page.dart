@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 
+import 'l10n/l10n.dart';
+
 /// 预览 PlatformView (dev):对照 Texture 路。
 ///
 /// 选视频 → 同一套引擎初始化(createStabilizer→openVideo→setStabEnabled→gyroOffset→recompute,
@@ -20,7 +22,7 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
   late final ParamsModel _model = ParamsModel(_bridge);
 
   String? _uri;
-  String _status = '点「选视频」开始';
+  String _status = L.current.pvStatusInitial;
   bool _playing = false; // 打开后停在首帧,手动点播放(对齐原生 + PreviewPlatformView init 渲首帧暂停)
   MethodChannel? _pv; // 每个 PlatformView 实例的控制通道
 
@@ -39,10 +41,14 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
       setState(() {
         _uri = uri;
         _playing = false; // 打开后停在首帧,手动点播放
-        _status = '原生直出 (PlatformView) · out=${info.outputWidth}x${info.outputHeight}';
+        _status = L.current.pvStatusNativeDirect(
+          '${info.outputWidth}x${info.outputHeight}',
+        );
       });
     } on PlatformException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('失败: ${e.code} ${e.message}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(L.current.pvFailed('${e.code} ${e.message}'))),
+      );
     }
   }
 
@@ -65,8 +71,9 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('预览 PlatformView (dev)')),
+      appBar: AppBar(title: Text(l10n.pvTitle)),
       body: Column(
         children: [
           Padding(
@@ -75,7 +82,7 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
           ),
           Expanded(
             child: _uri == null
-                ? const Center(child: Text('未选视频'))
+                ? Center(child: Text(l10n.pvNoVideo))
                 : UiKitView(
                     viewType: 'runcam_gf/preview_platformview',
                     creationParams: {'uri': _uri},
@@ -88,10 +95,10 @@ class _PreviewPlatformViewPageState extends State<PreviewPlatformViewPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                ElevatedButton(onPressed: _start, child: const Text('选视频')),
+                ElevatedButton(onPressed: _start, child: Text(l10n.pvPickVideo)),
                 ElevatedButton(
                   onPressed: _uri == null ? null : _togglePlay,
-                  child: Text(_playing ? '暂停' : '播放'),
+                  child: Text(_playing ? l10n.pvPause : l10n.pvPlay),
                 ),
               ],
             ),
