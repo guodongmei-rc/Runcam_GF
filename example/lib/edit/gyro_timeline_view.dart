@@ -137,14 +137,15 @@ class _GyroPainter extends CustomPainter {
   final double trimStart;
   final double trimEnd;
 
-  // x 红 / y 绿 / z 蓝 / w 橙(对齐原生 GyroTimelineView.m 配色)。
+  // 轴线配色对齐官方桌面 TimelineGyroChart.rs:深色底用「同步数据」亮色组更清晰。
+  // x 亮红 / y 亮绿 / z 亮青蓝 / w(Angle)亮品红。
   static const _colors = [
-    Color(0xF2FF5959),
-    Color(0xF259F273),
-    Color(0xF266A6FF),
-    Color(0xF2FFBF4D),
+    Color(0xFFFF8888),
+    Color(0xFF88FF88),
+    Color(0xFF88DEFF),
+    Color(0xFFFF88FF),
   ];
-  static const _syncColor = Color(0xD933F280); // 同步点绿(对齐原生 spLineColor)
+  static const _syncColor = Color(0xFF25E8D2); // 同步点 teal(对齐官方 #25e8d2)
   static const _trimColor = Color(0xFFFF8000); // 裁剪选区(橙,对齐主题色 GfColors.accent)
 
   @override
@@ -206,7 +207,7 @@ class _GyroPainter extends CustomPainter {
           text: TextSpan(
             text: off.toStringAsFixed(2),
             style: const TextStyle(
-                color: Color(0xFF6BF7A8),
+                color: _syncColor, // 同步点偏移文字同 teal(对齐官方)
                 fontSize: 9,
                 fontWeight: FontWeight.w600),
           ),
