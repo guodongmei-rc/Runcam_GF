@@ -282,7 +282,7 @@ class _ExportPanelState extends State<ExportPanel> {
             value: m.exportCodecIndex.clamp(0, _codecs.length - 1),
             onChanged: (i) => setState(() => m.exportCodecIndex = i),
           ),
-          // 输出大小:宽 [锁] 高 + 预设。宽高只读(只能经预设选),锁符号居中替代 ×、始终锁定。
+          // 输出大小:宽 [锁] 高 + 预设。宽高只读(只能经预设选),直接以文字显示、不用输入框。
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(children: [
@@ -291,12 +291,20 @@ class _ExportPanelState extends State<ExportPanel> {
                   child: Text(context.l10n.expOutputSize,
                       style: const TextStyle(
                           color: GfColors.textSecondary, fontSize: 13))),
-              Expanded(child: _numField(_w, _wf, readOnly: true)),
+              Expanded(
+                child: Text('${c.exportWidth}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: GfColors.text, fontSize: 13)),
+              ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: Icon(Icons.link, size: 18, color: GfColors.accent),
               ),
-              Expanded(child: _numField(_h, _hf, readOnly: true)),
+              Expanded(
+                child: Text('${c.exportHeight}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: GfColors.text, fontSize: 13)),
+              ),
               // 预设(横向比例 tab + 竖向尺寸,对齐官方 sizeMenu)。
               IconButton(
                 visualDensity: VisualDensity.compact,
