@@ -535,6 +535,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ctlAutosyncNoOffset => '自动同步未找到偏移';
 
   @override
+  String get ctlLensWrongType => '请选择 .json 镜头档案';
+
+  @override
+  String get ctlMotionWrongType => '请选择 .gcsv 运动数据文件';
+
+  @override
   String get inputVideoInfo => '视频信息';
 
   @override

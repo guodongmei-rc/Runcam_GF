@@ -45,8 +45,9 @@ final class VideoPickerChannel: NSObject, UIDocumentPickerDelegate {
       switch call.method {
       // —— 普通文件:用 .import 拷进沙盒返回副本路径 ——
       case "pickVideo":      self.present(types: ["public.movie"], result: result)
-      case "pickLensFile":   self.present(types: ["public.json", "public.data"], result: result)      // 镜头档案 .json
-      case "pickMotionFile": self.present(types: ["public.data", "public.item"], result: result)      // 陀螺 sidecar .gcsv/.csv/.bbl…
+      case "pickLensFile":   self.present(types: ["public.json"], result: result)                      // 镜头档案:只允许 .json
+      // .gcsv 无系统 UTI,这里放 public.data 让其可见;最终只接受 .gcsv 由 Dart 侧按扩展名校验。
+      case "pickMotionFile": self.present(types: ["public.data"], result: result)                      // 运动数据:只接受 .gcsv
       // —— 目录授权:用 .open 模式拿到目录的 security-scoped URL ——
       case "pickFolder":
         self.presentFolder(result: result)

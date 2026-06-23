@@ -207,6 +207,8 @@
   "ctlAutosyncComplete": "Auto sync complete ({count} sync points, median offset {ms} ms)",
   "@ctlAutosyncComplete": { "placeholders": { "count": { "type": "String" }, "ms": { "type": "String" } } },
   "ctlAutosyncNoOffset": "Auto sync found no offset",
+  "ctlLensWrongType": "Please select a .json lens profile",
+  "ctlMotionWrongType": "Please select a .gcsv motion file",
 
   "inputVideoInfo": "Video information",
   "inputOpenFile": "Open file",

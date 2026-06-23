@@ -539,6 +539,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ctlAutosyncNoOffset => 'Auto sync found no offset';
 
   @override
+  String get ctlLensWrongType => 'Please select a .json lens profile';
+
+  @override
+  String get ctlMotionWrongType => 'Please select a .gcsv motion file';
+
+  @override
   String get inputVideoInfo => 'Video information';
 
   @override

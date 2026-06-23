@@ -163,6 +163,8 @@
   "ctlAutosyncNeedLens": "需先加载镜头档案才能自动同步",
   "ctlAutosyncComplete": "自动同步完成({count} 个同步点,中位偏移 {ms} ms)",
   "ctlAutosyncNoOffset": "自动同步未找到偏移",
+  "ctlLensWrongType": "请选择 .json 镜头档案",
+  "ctlMotionWrongType": "请选择 .gcsv 运动数据文件",
 
   "inputVideoInfo": "视频信息",
   "inputOpenFile": "打开文件",

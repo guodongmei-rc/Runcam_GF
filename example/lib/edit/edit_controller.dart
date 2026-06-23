@@ -1050,18 +1050,30 @@ class EditController extends ChangeNotifier {
   void setImuLpfHz(double hz) => params.imuLpfHz = hz;
 
   /// 镜头「打开文件」:选镜头档案 → loadLens(已含 recompute + 刷新镜头信息)。
+  /// 仅接受 .json 镜头档案;选了其它类型则提示并不加载(跨端统一在此校验扩展名)。
   Future<void> openLensFile() async {
     if (uri == null || busy) return;
     final picked = await _picker.invokeMethod<String>('pickLensFile');
     if (picked == null) return;
+    if (_extOf(picked) != 'JSON') {
+      status = L.current.ctlLensWrongType;
+      notifyListeners();
+      return;
+    }
     await loadLens(picked);
   }
 
   /// 运动数据「打开文件」:选陀螺 sidecar → loadGyro → recompute → 刷新。
+  /// 仅接受 .gcsv 运动数据;选了其它类型则提示并不加载。
   Future<void> openMotionFile() async {
     if (uri == null || busy) return;
     final picked = await _picker.invokeMethod<String>('pickMotionFile');
     if (picked == null) return;
+    if (_extOf(picked) != 'GCSV') {
+      status = L.current.ctlMotionWrongType;
+      notifyListeners();
+      return;
+    }
     _setBusy(true);
     try {
       await _bridge.loadGyro(picked, loadAllMetadata);

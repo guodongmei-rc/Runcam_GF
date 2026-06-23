@@ -1033,6 +1033,18 @@ abstract class AppLocalizations {
   /// **'Auto sync found no offset'**
   String get ctlAutosyncNoOffset;
 
+  /// No description provided for @ctlLensWrongType.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a .json lens profile'**
+  String get ctlLensWrongType;
+
+  /// No description provided for @ctlMotionWrongType.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a .gcsv motion file'**
+  String get ctlMotionWrongType;
+
   /// No description provided for @inputVideoInfo.
   ///
   /// In en, this message translates to:
