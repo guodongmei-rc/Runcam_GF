@@ -154,6 +154,10 @@ class _GyroPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final midY = size.height / 2;
+    // 裁剪框/播放头的底端统一到这条线:durationMs>0 时让出底部 13px 同步偏移文字带,
+    // 使裁剪框底端与播放头底端对齐。
+    final bottomY =
+        durationMs > 0 ? (size.height - 13.0).clamp(0.0, size.height) : size.height;
     // 中线
     canvas.drawLine(Offset(0, midY), Offset(size.width, midY),
         Paint()..color = const Color(0x33FFFFFF)..strokeWidth = 1);
@@ -226,14 +230,15 @@ class _GyroPainter extends CustomPainter {
     if (showTrim) {
       final sx = (trimStart.clamp(0.0, 1.0)) * size.width;
       final ex = (trimEnd.clamp(0.0, 1.0)) * size.width;
+      final gripY = bottomY / 2; // 手柄抓点居中于裁剪框
       final dim = Paint()..color = const Color(0x80000000); // 选区外压暗 50%
-      if (sx > 0) canvas.drawRect(Rect.fromLTRB(0, 0, sx, size.height), dim);
+      if (sx > 0) canvas.drawRect(Rect.fromLTRB(0, 0, sx, bottomY), dim);
       if (ex < size.width) {
-        canvas.drawRect(Rect.fromLTRB(ex, 0, size.width, size.height), dim);
+        canvas.drawRect(Rect.fromLTRB(ex, 0, size.width, bottomY), dim);
       }
-      // 选区边框
+      // 选区边框(底端对齐播放头底端 bottomY)
       canvas.drawRect(
-          Rect.fromLTRB(sx, 0.5, ex, size.height - 0.5),
+          Rect.fromLTRB(sx, 0.5, ex, bottomY - 0.5),
           Paint()
             ..color = _trimColor
             ..style = PaintingStyle.stroke
@@ -241,26 +246,20 @@ class _GyroPainter extends CustomPainter {
       // 两侧手柄:竖条 + 中部圆点抓手
       final handle = Paint()..color = _trimColor;
       for (final hx in [sx, ex]) {
-        canvas.drawRect(
-            Rect.fromCenter(
-                center: Offset(hx, midY), width: 4, height: size.height),
-            handle);
-        canvas.drawCircle(Offset(hx, midY), 5, handle);
+        canvas.drawRect(Rect.fromLTRB(hx - 2, 0, hx + 2, bottomY), handle);
+        canvas.drawCircle(Offset(hx, gripY), 5, handle);
         canvas.drawCircle(
-            Offset(hx, midY), 2.2, Paint()..color = const Color(0xFF1A1A1A));
+            Offset(hx, gripY), 2.2, Paint()..color = const Color(0xFF1A1A1A));
       }
     }
 
-    // 播放头竖线也只画到文字带上方,避免压住底部偏移文字。
-    final hbBottom =
-        durationMs > 0 ? (size.height - 13.0).clamp(0.0, size.height) : size.height;
-
     // 播放头(对齐官方 Timeline.qml handle):浅蓝竖线 + 顶部「旗标头」(圆角矩形 + 下尖角)。
+    // 底端 = bottomY,与裁剪框底端一致。
     final px = progress.clamp(0.0, 1.0) * size.width;
     final headPaint = Paint()..color = _playheadColor;
     const headW = 14.0, headBody = 11.0, headTip = 16.0; // 头宽 / 矩形高 / 尖角底
     // 竖线(从旗标头下沿到文字带上沿)
-    canvas.drawLine(Offset(px, headTip - 2), Offset(px, hbBottom),
+    canvas.drawLine(Offset(px, headTip - 2), Offset(px, bottomY),
         Paint()..color = _playheadColor..strokeWidth = 2);
     // 旗标头:圆角矩形 + 下三角尖
     final headRect = RRect.fromRectAndRadius(
