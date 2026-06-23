@@ -570,7 +570,26 @@ class EditController extends ChangeNotifier {
   MethodChannel? _pvChannel;
 
   /// 选视频 → 引擎初始化(一次)→ 起当前后端。
+  /// 暂停当前预览(原生播放器 + Dart 预览时钟)。供「打开文件」点击时先停住正在播放的视频。
+  /// 两端统一走 PreviewApi.pause / PlatformView 'pause',iOS、安卓行为一致。
+  Future<void> _pausePreview() async {
+    if (!playing) return;
+    playing = false;
+    try {
+      if (backend == PreviewBackend.texture) {
+        await _previewApi.pause();
+      } else {
+        await _pvChannel?.invokeMethod('pause');
+      }
+    } catch (_) {/* 暂停失败忽略 */}
+    _maybeRunPreviewClock();
+    notifyListeners();
+  }
+
   Future<void> openAndStart() async {
+    // 点「打开文件」立即暂停当前播放:选片器打开期间旧视频不再后台播放(iOS/安卓一致);
+    // 用户取消选择时也保持暂停。
+    await _pausePreview();
     final picked = await _picker.invokeMethod<String>('pickVideo');
     if (picked == null) return;
     _setBusy(true);
