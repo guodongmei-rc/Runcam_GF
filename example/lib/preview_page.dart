@@ -136,10 +136,12 @@ class _PreviewPageState extends State<PreviewPage>
         },
       );
 
-  // 运动数据波形(预览下方、按钮上方);未载入视频返回空占位。
-  Widget _gyroTimeline() {
+  // 运动数据波形(预览下方、按钮上方);未载入视频返回空占位。height 默认 84,
+  // 手机横屏传一半(42)以省竖向空间。
+  Widget _gyroTimeline({double height = 84}) {
     if (_c.uri == null) return const SizedBox.shrink();
     return GyroTimelineView(
+      height: height,
       samples: _c.gyroSamples,
       axes: _c.gyroAxes,
       progress: _gyroProgress(),
@@ -274,7 +276,7 @@ class _PreviewPageState extends State<PreviewPage>
                     Expanded(child: _previewContent()),
                     if (_c.uri != null) ...[
                       const SizedBox(height: 6),
-                      _gyroTimeline(),
+                      _gyroTimeline(height: 42), // 手机横屏:运动数据高度减半
                     ],
                     _controlButtons(),
                   ],
