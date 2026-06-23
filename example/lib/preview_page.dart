@@ -96,21 +96,25 @@ class _PreviewPageState extends State<PreviewPage>
         ],
       );
 
-  // 预览区:固定高度 =(可用宽 − 20)× 9/16(16:9 左右各留 10);宽 = 高 × 比例(AspectRatio 自动)。
-  // 宽度基于「所在容器」(窄屏=整宽;宽屏=中栏宽),改输出大小时高度不变、按新比例重算宽度。
+  // 预览画面内容:黑底 + 视频帧(PreviewView 内部 Center+AspectRatio 按 c.aspect 居中、
+  // 在「所在区域」内按比例适配)。给固定高度容器或 Expanded 都可。
+  Widget _previewContent() => Container(
+        color: GfColors.bg,
+        width: double.infinity,
+        child: AnimatedBuilder(
+          animation: _ticker,
+          builder: (_, _) => PreviewView(controller: _c),
+        ),
+      );
+
+  // 窄屏预览区:固定高度 =(可用宽 − 20)× 9/16(16:9 左右各留 10);宽 = 高 × 比例(AspectRatio 自动)。
   Widget _previewBox() => LayoutBuilder(
         builder: (context, constraints) {
           final previewH = (constraints.maxWidth - 20) * 9 / 16;
           return SizedBox(
             height: previewH,
             width: double.infinity,
-            child: Container(
-              color: GfColors.bg,
-              child: AnimatedBuilder(
-                animation: _ticker,
-                builder: (_, _) => PreviewView(controller: _c),
-              ),
-            ),
+            child: _previewContent(),
           );
         },
       );
@@ -188,10 +192,19 @@ class _PreviewPageState extends State<PreviewPage>
         ),
       );
 
-  // 参数模块(含同步)。供窄屏「参数」Tab 与宽屏右栏复用。
+  // 参数模块:稳定 → 同步 → 导出,整列一起滚动(导出接在稳定模块下方,不单独成 Tab)。
+  // 供窄屏「参数」Tab 与宽屏右栏复用。
   Widget _paramsPanel() => StabilizePanel(
         model: _c.params,
-        trailing: SyncPanel(controller: _c), // 参数下方:同步模块
+        trailing: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SyncPanel(controller: _c), // 同步模块
+            const Divider(height: 22, color: GfColors.border),
+            // 导出模块:嵌入(不自带滚动)→ 跟随上面的参数列表一起滚到底。
+            ExportPanel(controller: _c, embedded: true),
+          ],
+        ),
         loadedValues: _c.loadedParamValues, // 双击标题恢复加载值
       );
 
@@ -203,14 +216,13 @@ class _PreviewPageState extends State<PreviewPage>
         _previewBox(),
         if (_c.uri != null) ...[const SizedBox(height: 6), _gyroTimeline()],
         _controlButtons(),
-        // 底部 Tab(输入/参数/导出)。
+        // 底部 Tab(输入/参数;导出已并入「参数」末尾)。
         GyroTabBar(
           index: _tab,
           onChanged: (i) => setState(() => _tab = i),
           tabs: [
             (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
             (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
-            (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
           ],
         ),
         Expanded(flex: 5, child: _tabContent()),
@@ -230,41 +242,24 @@ class _PreviewPageState extends State<PreviewPage>
               // 左栏:整个输入模块。
               Expanded(flex: 1, child: InputPanel(controller: _c)),
               const VerticalDivider(width: 1, color: GfColors.border),
-              // 中栏(占 2 栏):预览 + 运动数据波形 + 5 个按钮(整体垂直居中)。
+              // 中栏(占 2 栏):上=预览区域(填充剩余空间,视频帧在内按比例适配),
+              // 中=运动数据波形,底=5 个按钮。
               Expanded(
                 flex: 2,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _previewBox(),
-                      if (_c.uri != null) ...[
-                        const SizedBox(height: 6),
-                        _gyroTimeline(),
-                      ],
-                      _controlButtons(),
+                child: Column(
+                  children: [
+                    Expanded(child: _previewContent()),
+                    if (_c.uri != null) ...[
+                      const SizedBox(height: 6),
+                      _gyroTimeline(),
                     ],
-                  ),
+                    _controlButtons(),
+                  ],
                 ),
               ),
               const VerticalDivider(width: 1, color: GfColors.border),
-              // 右栏:参数模块(稳定 + 同步),其下接导出模块 —— 整列一起滚动,导出不固定。
-              Expanded(
-                flex: 1,
-                child: StabilizePanel(
-                  model: _c.params,
-                  trailing: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SyncPanel(controller: _c), // 同步模块
-                      const Divider(height: 22, color: GfColors.border),
-                      // 导出模块:嵌入(不自带滚动)→ 跟随上面的参数列表一起滚到底。
-                      ExportPanel(controller: _c, embedded: true),
-                    ],
-                  ),
-                  loadedValues: _c.loadedParamValues,
-                ),
-              ),
+              // 右栏:参数模块(稳定 → 同步 → 导出,整列一起滚动)。
+              Expanded(flex: 1, child: _paramsPanel()),
             ],
           ),
         ),
@@ -463,17 +458,12 @@ class _PreviewPageState extends State<PreviewPage>
   }
 
   Widget _tabContent() {
-    switch (_tab) {
-      case 0:
-        return InputPanel(controller: _c);
-      case 1:
-        return _c.uri == null
-            ? Center(
-                child: Text(context.l10n.prevSelectVideoHint,
-                    style: const TextStyle(color: GfColors.textSecondary)))
-            : _paramsPanel();
-      default:
-        return ExportPanel(controller: _c);
-    }
+    if (_tab == 0) return InputPanel(controller: _c);
+    // 「参数」Tab:稳定 → 同步 → 导出(_paramsPanel 内含);未载入视频先给提示。
+    return _c.uri == null
+        ? Center(
+            child: Text(context.l10n.prevSelectVideoHint,
+                style: const TextStyle(color: GfColors.textSecondary)))
+        : _paramsPanel();
   }
 }
