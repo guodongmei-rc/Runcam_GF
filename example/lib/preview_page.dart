@@ -54,7 +54,13 @@ class _PreviewPageState extends State<PreviewPage>
       backgroundColor: GfColors.bg,
       body: Stack(
         children: [
-          SafeArea(child: _bodyColumn()),
+          // 宽屏(iPad 横屏)走三栏布局,窄屏(手机/竖屏)走原 Tab 布局。
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, c) =>
+                  c.maxWidth >= _kWideBreakpoint ? _wideBody() : _bodyColumn(),
+            ),
+          ),
           // 加载视频蒙版(转圈)。
           if (_c.busy) _busyOverlay(context.l10n.prevLoadingVideo),
           // 自动同步蒙版「分析中…」(对齐原生 syncOverlay)。
@@ -66,138 +72,198 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
+  // iPad 横屏等宽屏阈值:>= 此宽度切「输入 | 预览 | 参数/导出」三栏布局。
+  static const double _kWideBreakpoint = 900;
+
+  // 顶栏:返回按钮 + 居中标题「Gyroflow」。
+  Widget _topBar() => Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios,
+                color: GfColors.unselectedBottomBarColor),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Gyroflow',
+                style: TextStyle(
+                    color: GfColors.unselectedBottomBarColor, fontSize: 18),
+              ),
+            ),
+          ),
+          const SizedBox(width: 48), // 平衡左侧返回按钮宽度,使标题真正居中
+        ],
+      );
+
+  // 预览区:固定高度 =(可用宽 − 20)× 9/16(16:9 左右各留 10);宽 = 高 × 比例(AspectRatio 自动)。
+  // 宽度基于「所在容器」(窄屏=整宽;宽屏=中栏宽),改输出大小时高度不变、按新比例重算宽度。
+  Widget _previewBox() => LayoutBuilder(
+        builder: (context, constraints) {
+          final previewH = (constraints.maxWidth - 20) * 9 / 16;
+          return SizedBox(
+            height: previewH,
+            width: double.infinity,
+            child: Container(
+              color: GfColors.bg,
+              child: AnimatedBuilder(
+                animation: _ticker,
+                builder: (_, _) => PreviewView(controller: _c),
+              ),
+            ),
+          );
+        },
+      );
+
+  // 运动数据波形(预览下方、按钮上方);未载入视频返回空占位。
+  Widget _gyroTimeline() {
+    if (_c.uri == null) return const SizedBox.shrink();
+    return GyroTimelineView(
+      samples: _c.gyroSamples,
+      axes: _c.gyroAxes,
+      progress: _gyroProgress(),
+      syncPoints: _c.autosyncSyncPoints,
+      durationMs: (_c.videoInfo?.durationS ?? 0) * 1000,
+      onSeek: (p) => _c.seekToProgress(p),
+      // 裁剪区间:仅裁剪开关开启时显示选区/手柄(回调为 null 即隐藏)。
+      trimStart: _c.trimStartFrac,
+      trimEnd: _c.trimEndFrac,
+      onTrimStart: _c.trimEnabled
+          ? (p) => _c.setTrimStartUs((p * _durationUs).round())
+          : null,
+      onTrimEnd: _c.trimEnabled
+          ? (p) => _c.setTrimEndUs((p * _durationUs).round())
+          : null,
+    );
+  }
+
+  // 预览控制按钮行:播放 / 稳定概览 / 防抖 / 背景模式 / 裁剪。
+  Widget _controlButtons() => Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        child: Row(
+          children: [
+            _ctrlBtn(
+              icon: _c.playing ? Icons.pause : Icons.play_arrow,
+              label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
+              active: _c.playing,
+              onTap: _c.uri == null ? null : _c.togglePlay,
+            ),
+            const SizedBox(width: 8),
+            _ctrlBtn(
+              icon: Icons.crop_free,
+              label: context.l10n.prevStabOverview,
+              active: _c.fovOverview,
+              onTap: _c.uri == null ? null : _c.toggleFovOverview,
+            ),
+            const SizedBox(width: 8),
+            _ctrlBtn(
+              icon: Icons.auto_fix_high,
+              label: context.l10n.prevStabilization,
+              active: _c.stabEnabled,
+              onTap: _c.uri == null ? null : _c.toggleStab,
+            ),
+            const SizedBox(width: 8),
+            _ctrlBtn(
+              icon: _bgModeIcon(_c.backgroundMode),
+              label: _c.backgroundModeName,
+              active: false,
+              onTap: _c.uri == null
+                  ? null
+                  : () {
+                      _c.cycleBackgroundMode();
+                      if (!_c.fovOverview) {
+                        _toast(context.l10n.prevEnableOverviewHint);
+                      }
+                    },
+            ),
+            const SizedBox(width: 8),
+            // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;关闭→导出整片。
+            _ctrlBtn(
+              icon: Icons.content_cut,
+              label: context.l10n.prevTrim,
+              active: _c.trimEnabled,
+              onTap: _c.uri == null ? null : _c.toggleTrim,
+            ),
+          ],
+        ),
+      );
+
+  // 参数模块(含同步)。供窄屏「参数」Tab 与宽屏右栏复用。
+  Widget _paramsPanel() => StabilizePanel(
+        model: _c.params,
+        trailing: SyncPanel(controller: _c), // 参数下方:同步模块
+        loadedValues: _c.loadedParamValues, // 双击标题恢复加载值
+      );
+
+  // 窄屏(手机/竖屏):预览 + 运动数据 + 按钮 + 底部 Tab。
   Widget _bodyColumn() {
     return Column(
-          children: [
-            // 顶栏:返回按钮 + 居中标题「Gyroflow」。
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, color: GfColors.unselectedBottomBarColor),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      'Gyroflow',
-                      style: TextStyle(
-                        color: GfColors.unselectedBottomBarColor,
-                        fontSize: 18,
-                      ),
-                    ),
+      children: [
+        _topBar(),
+        _previewBox(),
+        if (_c.uri != null) ...[const SizedBox(height: 6), _gyroTimeline()],
+        _controlButtons(),
+        // 底部 Tab(输入/参数/导出)。
+        GyroTabBar(
+          index: _tab,
+          onChanged: (i) => setState(() => _tab = i),
+          tabs: [
+            (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
+            (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
+            (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
+          ],
+        ),
+        Expanded(flex: 5, child: _tabContent()),
+      ],
+    );
+  }
+
+  // 宽屏(iPad 横屏):四等分三栏 —— 左「输入」(1) | 中 预览+运动数据+按钮(2) | 右 参数(上)/导出(下)(1)。
+  Widget _wideBody() {
+    return Column(
+      children: [
+        _topBar(),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 左栏:整个输入模块。
+              Expanded(flex: 1, child: InputPanel(controller: _c)),
+              const VerticalDivider(width: 1, color: GfColors.border),
+              // 中栏(占 2 栏):预览 + 运动数据波形 + 5 个按钮(整体垂直居中)。
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _previewBox(),
+                      if (_c.uri != null) ...[
+                        const SizedBox(height: 6),
+                        _gyroTimeline(),
+                      ],
+                      _controlButtons(),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 48), // 平衡左侧返回按钮宽度,使标题真正居中
-              ],
-            ),
-            // 预览区:固定高度 = 16:9 视频「左右各留 10」时的高度 =(可用宽 − 20)× 9/16。
-            // 之后任意输出比例都用这个固定高度,宽度 = 高度 × 比例(由内部 AspectRatio 自动算):
-            //   16:9 → 宽 = 可用宽 − 20,左右恰好各 10;
-            //   更窄(如 4:3)→ 等高,宽更小,左右留白更大;均水平居中。
-            // 改输出大小(c.aspect 变)时,高度不变、按新比例重算宽度。
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final previewH = (constraints.maxWidth - 20) * 9 / 16;
-                return SizedBox(
-                  height: previewH,
-                  width: double.infinity,
-                  child: Container(
-                    color: GfColors.bg,
-                    child: AnimatedBuilder(
-                      animation: _ticker,
-                      builder: (_, _) => PreviewView(controller: _c),
-                    ),
-                  ),
-                );
-              },
-            ),
-            // 陀螺数据波形(对齐原生:预览下方、按钮上方),仅载入视频后显示。
-            if (_c.uri != null) ...[
-              const SizedBox(height: 6),
-              GyroTimelineView(
-                samples: _c.gyroSamples,
-                axes: _c.gyroAxes,
-                progress: _gyroProgress(),
-                syncPoints: _c.autosyncSyncPoints,
-                durationMs: (_c.videoInfo?.durationS ?? 0) * 1000,
-                onSeek: (p) => _c.seekToProgress(p),
-                // 裁剪区间:仅在裁剪开关开启时显示选区/手柄(回调为 null 即隐藏);
-                // 手柄拖动按时长换算成 µs 回写控制器(导出仅渲染该段)。
-                trimStart: _c.trimStartFrac,
-                trimEnd: _c.trimEndFrac,
-                onTrimStart: _c.trimEnabled
-                    ? (p) => _c.setTrimStartUs((p * _durationUs).round())
-                    : null,
-                onTrimEnd: _c.trimEnabled
-                    ? (p) => _c.setTrimEndUs((p * _durationUs).round())
-                    : null,
+              ),
+              const VerticalDivider(width: 1, color: GfColors.border),
+              // 右栏:参数模块(上)+ 导出模块(下)。
+              Expanded(
+                flex: 1,
+                child: Column(
+                  children: [
+                    Expanded(flex: 3, child: _paramsPanel()),
+                    const Divider(height: 1, color: GfColors.border),
+                    Expanded(flex: 2, child: ExportPanel(controller: _c)),
+                  ],
+                ),
               ),
             ],
-            // 预览控制按钮行:播放 / 切换稳定概览 / 防抖 / 背景模式(对齐官方预览控制)。
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-              child: Row(
-                children: [
-                  _ctrlBtn(
-                    icon: _c.playing ? Icons.pause : Icons.play_arrow,
-                    label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
-                    active: _c.playing,
-                    onTap: _c.uri == null ? null : _c.togglePlay,
-                  ),
-                  const SizedBox(width: 8),
-                  _ctrlBtn(
-                    icon: Icons.crop_free,
-                    label: context.l10n.prevStabOverview,
-                    active: _c.fovOverview,
-                    onTap: _c.uri == null ? null : _c.toggleFovOverview,
-                  ),
-                  const SizedBox(width: 8),
-                  _ctrlBtn(
-                    icon: Icons.auto_fix_high,
-                    label: context.l10n.prevStabilization,
-                    active: _c.stabEnabled,
-                    onTap: _c.uri == null ? null : _c.toggleStab,
-                  ),
-                  const SizedBox(width: 8),
-                  _ctrlBtn(
-                    icon: _bgModeIcon(_c.backgroundMode),
-                    label: _c.backgroundModeName,
-                    active: false,
-                    onTap: _c.uri == null
-                        ? null
-                        : () {
-                            _c.cycleBackgroundMode();
-                            if (!_c.fovOverview) {
-                              _toast(context.l10n.prevEnableOverviewHint);
-                            }
-                          },
-                  ),
-                  const SizedBox(width: 8),
-                  // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;
-                  // 关闭→取消选区,导出整片。
-                  _ctrlBtn(
-                    icon: Icons.content_cut,
-                    label: context.l10n.prevTrim,
-                    active: _c.trimEnabled,
-                    onTap: _c.uri == null ? null : _c.toggleTrim,
-                  ),
-                ],
-              ),
-            ),
-            // 底部 Tab(输入/参数/导出)。
-            GyroTabBar(
-              index: _tab,
-              onChanged: (i) => setState(() => _tab = i),
-              tabs: [
-                (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
-                (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
-                (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
-              ],
-            ),
-            // Tab 内容。
-            Expanded(flex: 5, child: _tabContent()),
-          ],
-        );
+          ),
+        ),
+      ],
+    );
   }
 
   // 预览控制按钮(只用图标,不放文字):激活=橙底白字,未激活=描边,禁用=灰。
@@ -399,11 +465,7 @@ class _PreviewPageState extends State<PreviewPage>
             ? Center(
                 child: Text(context.l10n.prevSelectVideoHint,
                     style: const TextStyle(color: GfColors.textSecondary)))
-            : StabilizePanel(
-                model: _c.params,
-                trailing: SyncPanel(controller: _c), // 参数下方:同步模块
-                loadedValues: _c.loadedParamValues, // 双击标题恢复加载值
-              );
+            : _paramsPanel();
       default:
         return ExportPanel(controller: _c);
     }
