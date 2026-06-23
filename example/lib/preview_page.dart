@@ -210,7 +210,7 @@ class _PreviewPageState extends State<PreviewPage>
       );
 
   // 参数模块整列(同一滚动):同步(顶,对齐官方 同步→稳定)→ 稳定 → 导出(稳定模块下方)。
-  // 供窄屏「参数」Tab 与宽屏右栏复用。
+  // 仅 iPad 三栏右栏用(无 Tab,故把导出接在稳定下方一起滚)。
   Widget _paramsPanel() => StabilizePanel(
         model: _c.params,
         trailing: SyncPanel(controller: _c), // 同步模块:置于稳定之上
@@ -223,6 +223,13 @@ class _PreviewPageState extends State<PreviewPage>
           ],
         ),
         loadedValues: _c.loadedParamValues, // 双击标题恢复加载值
+      );
+
+  // 「参数」Tab 内容:稳定 + 同步(导出在独立「导出」Tab,故此处不含导出)。
+  Widget _paramsTab() => StabilizePanel(
+        model: _c.params,
+        trailing: SyncPanel(controller: _c),
+        loadedValues: _c.loadedParamValues,
       );
 
   // 窄屏(手机/竖屏):预览 + 运动数据 + 按钮 + 底部 Tab。
@@ -239,13 +246,14 @@ class _PreviewPageState extends State<PreviewPage>
     );
   }
 
-  // 底部 Tab 栏(输入/参数;导出已并入「参数」末尾)。
+  // Tab 栏:输入 / 参数 / 导出(三个)。
   Widget _tabBar() => GyroTabBar(
         index: _tab,
         onChanged: (i) => setState(() => _tab = i),
         tabs: [
           (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
           (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
+          (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
         ],
       );
 
@@ -273,13 +281,13 @@ class _PreviewPageState extends State<PreviewPage>
                 ),
               ),
               const VerticalDivider(width: 1, color: GfColors.border),
-              // 右栏(3):Tab 内容 + 底部 Tab 标签。
+              // 右栏(3):Tab 标签在上,内容在下。
               Expanded(
                 flex: 3,
                 child: Column(
                   children: [
-                    Expanded(child: _tabContent()),
                     _tabBar(),
+                    Expanded(child: _tabContent()),
                   ],
                 ),
               ),
@@ -524,12 +532,18 @@ class _PreviewPageState extends State<PreviewPage>
   }
 
   Widget _tabContent() {
-    if (_tab == 0) return InputPanel(controller: _c);
-    // 「参数」Tab:稳定 → 同步 → 导出(_paramsPanel 内含);未载入视频先给提示。
-    return _c.uri == null
-        ? Center(
-            child: Text(context.l10n.prevSelectVideoHint,
-                style: const TextStyle(color: GfColors.textSecondary)))
-        : _paramsPanel();
+    switch (_tab) {
+      case 0:
+        return InputPanel(controller: _c);
+      case 1:
+        // 「参数」Tab:稳定 + 同步;未载入视频先给提示。
+        return _c.uri == null
+            ? Center(
+                child: Text(context.l10n.prevSelectVideoHint,
+                    style: const TextStyle(color: GfColors.textSecondary)))
+            : _paramsTab();
+      default:
+        return ExportPanel(controller: _c); // 「导出」Tab
+    }
   }
 }
