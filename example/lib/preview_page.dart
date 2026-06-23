@@ -64,17 +64,23 @@ class _PreviewPageState extends State<PreviewPage>
           // 三套布局:① 宽屏(iPad 横屏,≥_kWideBreakpoint)三栏;② 手机横屏两栏
           // (左 预览/运动数据/按钮 4 : 右 Tab 3);③ 竖屏 走原 Tab 单列。
           // 包一层 GestureDetector:点页面任意空白处收起镜头检索列表(子控件照常响应)。
-          SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _dismissLensOverlay,
-              child: LayoutBuilder(
-                builder: (context, c) {
-                  if (c.maxWidth >= _kWideBreakpoint) return _wideBody();
-                  if (c.maxWidth > c.maxHeight) return _phoneLandscapeBody();
-                  return _bodyColumn();
-                },
-              ),
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _dismissLensOverlay,
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final wide = c.maxWidth >= _kWideBreakpoint;
+                final phoneLandscape = !wide && c.maxWidth > c.maxHeight;
+                final body = wide
+                    ? _wideBody()
+                    : (phoneLandscape ? _phoneLandscapeBody() : _bodyColumn());
+                // 手机横屏:不预留左右安全区(用满整宽);其余布局四周都留。
+                return SafeArea(
+                  left: !phoneLandscape,
+                  right: !phoneLandscape,
+                  child: body,
+                );
+              },
             ),
           ),
           // 加载视频蒙版(转圈)。
