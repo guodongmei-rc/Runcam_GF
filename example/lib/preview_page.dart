@@ -259,40 +259,48 @@ class _PreviewPageState extends State<PreviewPage>
         ],
       );
 
-  // 手机横屏:左(4)预览 + 运动数据 + 5 按钮;右(3)Tab(输入/参数,内容 + 标签)。
+  // 手机横屏顶栏:返回按钮 + 紧挨其右的标题(不居中)。
+  Widget _topBarLeft() => Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios,
+                color: GfColors.unselectedBottomBarColor),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          const Text('Gyroflow',
+              style: TextStyle(
+                  color: GfColors.unselectedBottomBarColor, fontSize: 18)),
+        ],
+      );
+
+  // 手机横屏:整体是左右两栏(无全宽顶栏)。
+  //   左(4):顶栏(返回+标题)在左上 → 预览(填充)→ 运动数据 → 5 按钮;
+  //   右(3):Tab 标签直接顶到最上端 → Tab 内容。
   Widget _phoneLandscapeBody() {
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _topBar(),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          flex: 4,
+          child: Column(
             children: [
-              // 左栏(4):预览填充顶部 + 运动数据波形 + 控制按钮。
-              Expanded(
-                flex: 4,
-                child: Column(
-                  children: [
-                    Expanded(child: _previewContent()),
-                    if (_c.uri != null) ...[
-                      const SizedBox(height: 6),
-                      _gyroTimeline(height: 42), // 手机横屏:运动数据高度减半
-                    ],
-                    _controlButtons(),
-                  ],
-                ),
-              ),
-              const VerticalDivider(width: 1, color: GfColors.border),
-              // 右栏(3):Tab 标签在上,内容在下。
-              Expanded(
-                flex: 3,
-                child: Column(
-                  children: [
-                    _tabBar(),
-                    Expanded(child: _tabContent()),
-                  ],
-                ),
-              ),
+              _topBarLeft(),
+              Expanded(child: _previewContent()),
+              if (_c.uri != null) ...[
+                const SizedBox(height: 6),
+                _gyroTimeline(height: 42), // 手机横屏:运动数据高度减半
+              ],
+              _controlButtons(),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1, color: GfColors.border),
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              _tabBar(), // 直接顶到最上端
+              Expanded(child: _tabContent()),
             ],
           ),
         ),
