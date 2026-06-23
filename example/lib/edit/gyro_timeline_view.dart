@@ -137,13 +137,13 @@ class _GyroPainter extends CustomPainter {
   final double trimStart;
   final double trimEnd;
 
-  // 轴线配色对齐官方桌面 TimelineGyroChart.rs:深色底用「同步数据」亮色组更清晰。
-  // x 亮红 / y 亮绿 / z 亮青蓝 / w(Angle)亮品红。
+  // 轴线配色对齐官方桌面 TimelineGyroChart.rs「原始数据」暗色组(情况A 三轴角速度 /
+  // 情况B 四元数 xyzw 均用此组)。x 暗红 / y 暗绿 / z 暗蓝 / w 暗品红。
   static const _colors = [
-    Color(0xFFFF8888),
-    Color(0xFF88FF88),
-    Color(0xFF88DEFF),
-    Color(0xFFFF88FF),
+    Color(0xFF8F4C4C),
+    Color(0xFF4C8F4D),
+    Color(0xFF4C7C8F),
+    Color(0xFF8F4C8F),
   ];
   static const _syncColor = Color(0xFF25E8D2); // 同步点 teal(对齐官方 #25e8d2)
   static const _trimColor = Color(0xFFFF8000); // 裁剪选区(橙,对齐主题色 GfColors.accent)
