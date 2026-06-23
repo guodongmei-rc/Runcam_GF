@@ -298,6 +298,15 @@ class _InputPanelState extends State<InputPanel> {
           onChanged: _onLensQueryChanged, // 跟随输入实时搜索(防抖)
           onSubmitted: _onLensSearchDone, // 点「完成」:收起键盘 + 搜索列表
         ),
+        const SizedBox(height: 10),
+        // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
+        Center(
+          child: SizedBox(
+            width: 180,
+            child: _primaryButton(context.l10n.inputOpenFile,
+                (c.busy || c.uri == null) ? null : c.openLensFile),
+          ),
+        ),
         // 搜索结果(点击加载)。
         for (final r in _lensResults)
           InkWell(
