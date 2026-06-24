@@ -148,6 +148,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stabSmoothnessRoll => 'Roll smoothness';
 
   @override
+  String get stabFixedPitch => 'Pitch angle';
+
+  @override
+  String get stabFixedYaw => 'Yaw angle';
+
+  @override
+  String get stabFixedRoll => 'Roll angle';
+
+  @override
   String get stabAdvanced => 'Advanced';
 
   @override

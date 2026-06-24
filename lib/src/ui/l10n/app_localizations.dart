@@ -338,6 +338,24 @@ abstract class AppLocalizations {
   /// **'Roll smoothness'**
   String get stabSmoothnessRoll;
 
+  /// No description provided for @stabFixedPitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Pitch angle'**
+  String get stabFixedPitch;
+
+  /// No description provided for @stabFixedYaw.
+  ///
+  /// In en, this message translates to:
+  /// **'Yaw angle'**
+  String get stabFixedYaw;
+
+  /// No description provided for @stabFixedRoll.
+  ///
+  /// In en, this message translates to:
+  /// **'Roll angle'**
+  String get stabFixedRoll;
+
   /// No description provided for @stabAdvanced.
   ///
   /// In en, this message translates to:

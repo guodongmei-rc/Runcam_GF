@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:runcam_gf/src/state/defaults.dart';
 import 'package:runcam_gf/src/state/params_model.dart';
 import '../../l10n/l10n.dart';
 import '../../toast.dart';
@@ -40,6 +41,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
         animation: m,
         builder: (context, _) {
           final l10n = context.l10n;
+          final method = m.smoothingMethod; // 0=无平滑 1=默认 2=纯3D 3=固定摄像头
           return ListView(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: [
@@ -60,70 +62,117 @@ class _StabilizePanelState extends State<StabilizePanel> {
               onTitleDoubleTap:
                   _reset('smoothingMethod', (v) => m.smoothingMethod = v.round()),
             ),
-            // 按轴关→显示总平滑度;开→显示三轴(对齐原生互斥)。
-            if (!m.perAxis)
+            // ── 主平滑控件随平滑方式切换(对齐官方)──
+            // 无平滑(0):不显示任何平滑控件。
+            // 默认(1):平滑度(按轴关→总;开→三轴,对齐原生互斥)。
+            if (method == 1)
+              if (!m.perAxis)
+                GyroSlider(
+                  key: const Key('stab_smoothness'),
+                  label: l10n.stabSmoothness, unit: '%', min: 0, max: 100,
+                  value: m.smoothness * 100,
+                  onChanged: (v) => m.smoothness = v / 100,
+                  onTitleDoubleTap: _reset('smoothness', (v) => m.smoothness = v),
+                )
+              else ...[
+                GyroSlider(
+                  key: const Key('stab_smoothness_pitch'),
+                  label: l10n.stabSmoothnessPitch, unit: '%', min: 0, max: 100,
+                  value: m.smoothnessPitch * 100,
+                  onChanged: (v) => m.smoothnessPitch = v / 100,
+                  onTitleDoubleTap:
+                      _reset('smoothnessPitch', (v) => m.smoothnessPitch = v),
+                ),
+                GyroSlider(
+                  label: l10n.stabSmoothnessYaw, unit: '%', min: 0, max: 100,
+                  value: m.smoothnessYaw * 100,
+                  onChanged: (v) => m.smoothnessYaw = v / 100,
+                  onTitleDoubleTap:
+                      _reset('smoothnessYaw', (v) => m.smoothnessYaw = v),
+                ),
+                GyroSlider(
+                  label: l10n.stabSmoothnessRoll, unit: '%', min: 0, max: 100,
+                  value: m.smoothnessRoll * 100,
+                  onChanged: (v) => m.smoothnessRoll = v / 100,
+                  onTitleDoubleTap:
+                      _reset('smoothnessRoll', (v) => m.smoothnessRoll = v),
+                ),
+              ],
+            // 纯3D(2):平滑度改为时间常数,单位秒(0.01–10.00),对齐官方。
+            if (method == 2)
               GyroSlider(
-                key: const Key('stab_smoothness'),
-                label: l10n.stabSmoothness, unit: '%', min: 0, max: 100,
-                value: m.smoothness * 100,
-                onChanged: (v) => m.smoothness = v / 100,
-                onTitleDoubleTap: _reset('smoothness', (v) => m.smoothness = v),
-              )
-            else ...[
-              GyroSlider(
-                key: const Key('stab_smoothness_pitch'),
-                label: l10n.stabSmoothnessPitch, unit: '%', min: 0, max: 100,
-                value: m.smoothnessPitch * 100,
-                onChanged: (v) => m.smoothnessPitch = v / 100,
+                key: const Key('stab_plain3d_time'),
+                label: l10n.stabSmoothness, unit: l10n.stabUnitSec,
+                min: 0.01, max: 10, precision: 2,
+                value: m.plain3dTimeConstant,
+                onChanged: (v) => m.plain3dTimeConstant = v,
                 onTitleDoubleTap:
-                    _reset('smoothnessPitch', (v) => m.smoothnessPitch = v),
+                    _reset('plain3dTimeConstant', (v) => m.plain3dTimeConstant = v),
+              ),
+            // 固定摄像头(3):用角度替代平滑度,顺序 Roll/Pitch/Yaw,双击标题回默认值。
+            if (method == 3) ...[
+              GyroSlider(
+                key: const Key('stab_fixed_roll'),
+                label: l10n.stabFixedRoll, unit: '°', min: -180, max: 180, precision: 2,
+                value: m.fixedRoll,
+                onChanged: (v) => m.fixedRoll = v,
+                onTitleDoubleTap:
+                    _resetDefault(ParamsDefaults.fixedRoll, (v) => m.fixedRoll = v),
               ),
               GyroSlider(
-                label: l10n.stabSmoothnessYaw, unit: '%', min: 0, max: 100,
-                value: m.smoothnessYaw * 100,
-                onChanged: (v) => m.smoothnessYaw = v / 100,
+                key: const Key('stab_fixed_pitch'),
+                label: l10n.stabFixedPitch, unit: '°', min: -90, max: 90, precision: 2,
+                value: m.fixedPitch,
+                onChanged: (v) => m.fixedPitch = v,
                 onTitleDoubleTap:
-                    _reset('smoothnessYaw', (v) => m.smoothnessYaw = v),
+                    _resetDefault(ParamsDefaults.fixedPitch, (v) => m.fixedPitch = v),
               ),
               GyroSlider(
-                label: l10n.stabSmoothnessRoll, unit: '%', min: 0, max: 100,
-                value: m.smoothnessRoll * 100,
-                onChanged: (v) => m.smoothnessRoll = v / 100,
+                label: l10n.stabFixedYaw, unit: '°', min: -180, max: 180, precision: 2,
+                value: m.fixedYaw,
+                onChanged: (v) => m.fixedYaw = v,
                 onTitleDoubleTap:
-                    _reset('smoothnessRoll', (v) => m.smoothnessRoll = v),
+                    _resetDefault(ParamsDefaults.fixedYaw, (v) => m.fixedYaw = v),
               ),
             ],
-            GyroAdvToggle(
-              label: l10n.stabAdvanced,
-              expanded: _advExpanded,
-              onTap: () => setState(() => _advExpanded = !_advExpanded),
-            ),
-            if (_advExpanded) ...[
-              GyroCheck(
-                key: const Key('stab_per_axis'),
-                label: l10n.stabPerAxis,
-                value: m.perAxis,
-                onChanged: (v) => m.perAxis = v,
+            // ── 高级选项随平滑方式联动 ──
+            // 无平滑(0)/固定(3):不显示高级区;默认(1):全部;纯3D(2):仅「仅修剪范围」。
+            if (method == 1 || method == 2) ...[
+              GyroAdvToggle(
+                label: l10n.stabAdvanced,
+                expanded: _advExpanded,
+                onTap: () => setState(() => _advExpanded = !_advExpanded),
               ),
-              GyroCheck(
-                label: l10n.stabOnlyTrimRange,
-                value: m.trimRangeOnly,
-                onChanged: (v) => m.trimRangeOnly = v,
-              ),
-              GyroSlider(
-                label: l10n.stabMaxSmoothness, unit: l10n.stabUnitSec, min: 0.1, max: 5, precision: 2,
-                value: m.maxSmoothnessSec,
-                onChanged: (v) => m.maxSmoothnessSec = v,
-                onTitleDoubleTap:
-                    _reset('maxSmoothnessSec', (v) => m.maxSmoothnessSec = v),
-              ),
-              GyroSlider(
-                label: l10n.stabMaxSmoothnessHighVel, unit: l10n.stabUnitSec, min: 0.01, max: 1, precision: 2,
-                value: m.alphaHighVelSec,
-                onChanged: (v) => m.alphaHighVelSec = v,
-                onTitleDoubleTap:
-                    _reset('alphaHighVelSec', (v) => m.alphaHighVelSec = v),
-              ),
+              if (_advExpanded) ...[
+                if (method == 1)
+                  GyroCheck(
+                    key: const Key('stab_per_axis'),
+                    label: l10n.stabPerAxis,
+                    value: m.perAxis,
+                    onChanged: (v) => m.perAxis = v,
+                  ),
+                GyroCheck(
+                  label: l10n.stabOnlyTrimRange,
+                  value: m.trimRangeOnly,
+                  onChanged: (v) => m.trimRangeOnly = v,
+                ),
+                if (method == 1)
+                  GyroSlider(
+                    label: l10n.stabMaxSmoothness, unit: l10n.stabUnitSec, min: 0.1, max: 5, precision: 2,
+                    value: m.maxSmoothnessSec,
+                    onChanged: (v) => m.maxSmoothnessSec = v,
+                    onTitleDoubleTap:
+                        _reset('maxSmoothnessSec', (v) => m.maxSmoothnessSec = v),
+                  ),
+                if (method == 1)
+                  GyroSlider(
+                    label: l10n.stabMaxSmoothnessHighVel, unit: l10n.stabUnitSec, min: 0.01, max: 1, precision: 2,
+                    value: m.alphaHighVelSec,
+                    onChanged: (v) => m.alphaHighVelSec = v,
+                    onTitleDoubleTap:
+                        _reset('alphaHighVelSec', (v) => m.alphaHighVelSec = v),
+                  ),
+              ],
             ],
             const Divider(),
             GyroCheck(
@@ -170,8 +219,8 @@ class _StabilizePanelState extends State<StabilizePanel> {
               value: m.croppingMode.clamp(0, 2),
               onChanged: (v) => m.croppingMode = v,
             ),
-            // 缩放限制:仅动态/静态缩放(method 1/2)显示。
-            if (m.croppingMode != 0)
+            // 缩放限额:非无平滑/固定摄像头时显示(含无缩放,对齐需求)。
+            if (method != 0 && method != 3)
               GyroSlider(
                 label: l10n.stabZoomLimit, unit: '%', min: 100, max: 300, precision: 0,
                 value: m.maxZoomPercent,
@@ -256,7 +305,7 @@ class _StabilizePanelState extends State<StabilizePanel> {
                 onChanged: (v) => m.addRoll = v,
                 onTitleDoubleTap: _reset('addRoll', (v) => m.addRoll = v),
               ),
-              if (m.croppingMode != 0)
+              if (m.croppingMode != 0 && method != 0 && method != 3)
                 GyroSlider(
                   label: l10n.stabZoomLimitIterations, min: 1, max: 15, precision: 0,
                   value: m.maxZoomIterations.toDouble(),
@@ -283,6 +332,12 @@ class _StabilizePanelState extends State<StabilizePanel> {
       _toast(context.l10n.stabRestoredLoadedValues);
     };
   }
+
+  // 双击标题:恢复到「默认值」(用于无「加载值」语义的参数,如固定摄像头角度)。
+  VoidCallback _resetDefault(double def, void Function(double) setRaw) => () {
+        setRaw(def);
+        _toast(context.l10n.stabRestoredLoadedValues);
+      };
 
   void _toast(String msg) => showAppToast(msg);
 

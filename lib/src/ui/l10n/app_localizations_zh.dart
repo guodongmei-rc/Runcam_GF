@@ -147,6 +147,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stabSmoothnessRoll => 'Roll 平滑度';
 
   @override
+  String get stabFixedPitch => 'Pitch 角度';
+
+  @override
+  String get stabFixedYaw => 'Yaw 角度';
+
+  @override
+  String get stabFixedRoll => 'Roll 角度';
+
+  @override
   String get stabAdvanced => '高级选项';
 
   @override
@@ -196,7 +205,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stabStaticZoom => '静态缩放';
 
   @override
-  String get stabZoomLimit => '缩放限制';
+  String get stabZoomLimit => '缩放限额';
 
   @override
   String get stabZoomingSpeed => '缩放速度';
