@@ -128,8 +128,14 @@ class RuncamGfPlugin :
                     return
                 }
                 pickerPending = result
+                // 导出目录需写权限:createDocument/openFileDescriptor("rw") 写视频文件,
+                // 仅读会在重启后(持久授权只剩读)导出失败。对齐 GyroflowActivity 的读+写授权。
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+                    )
                 }
                 act.startActivityForResult(intent, reqPickFolder)
             }
@@ -161,9 +167,13 @@ class RuncamGfPlugin :
         val uri = data?.data
         if (resultCode == Activity.RESULT_OK && uri != null) {
             try {
-                appContext?.contentResolver?.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
+                // 目录授权(导出落盘)需持久化读+写;单文件(视频/镜头/运动数据)仅读。
+                val flags = if (requestCode == reqPickFolder) {
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                } else {
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                appContext?.contentResolver?.takePersistableUriPermission(uri, flags)
             } catch (_: Exception) {
                 // best-effort:某些来源不支持持久授权,但本次会话内仍可读。
             }
