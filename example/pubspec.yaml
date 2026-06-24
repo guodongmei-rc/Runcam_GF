@@ -31,13 +31,12 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  flutter_svg: ^2.0.10
-  # 吐司
+  # flutter_svg / shared_preferences 已随编辑器 UI 移入插件;example 经传递依赖获得。
+  # 吐司:main.dart 直接挂 ToastificationWrapper,故仍为直接依赖。
   toastification:
     git:
       url: https://github.com/guodongmei-rc/toastification.git
       ref: main
-  shared_preferences: ^2.5.5
 
 dev_dependencies:
   integration_test:

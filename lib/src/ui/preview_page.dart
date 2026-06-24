@@ -21,7 +21,7 @@ class PreviewPage extends StatefulWidget {
 }
 
 class _PreviewPageState extends State<PreviewPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final EditController _c = EditController();
   int _tab = 0; // 0=输入 1=参数 2=导出(对齐原生默认「输入」)
   late final AnimationController _ticker = AnimationController(
@@ -29,11 +29,24 @@ class _PreviewPageState extends State<PreviewPage>
     duration: const Duration(seconds: 1),
   );
 
+  // 插件自带本地化:按项目规则(仅简体中文显中文,其余一律英文)解析一次,
+  // 系统语言变化时经 didChangeLocales 刷新 —— 不在每帧重建里重算。
+  Locale _locale = _resolveLocale();
+  static Locale _resolveLocale() => resolveAppLocale(
+      WidgetsBinding.instance.platformDispatcher.locales, const <Locale>[]);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ticker.repeat(); // Texture 后端需持续帧驱动 Flutter 合成到 60Hz
     _c.addListener(_onChange);
+  }
+
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    final next = _resolveLocale();
+    if (next != _locale) setState(() => _locale = next);
   }
 
   void _onChange() => setState(() {});
@@ -46,6 +59,7 @@ class _PreviewPageState extends State<PreviewPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _c.removeListener(_onChange);
     _ticker.dispose();
     _c.dispose();
@@ -54,14 +68,11 @@ class _PreviewPageState extends State<PreviewPage>
 
   @override
   Widget build(BuildContext context) {
-    // 插件自带本地化:按项目规则(仅简体中文显中文,其余一律英文)就地解析语言,
-    // 再用 Localizations.override 注入 AppLocalizations 委托 —— 宿主 app 无需任何
-    // l10n 配置即可使用本编辑器,语言也不受宿主 supportedLocales 限制。
-    final locale = resolveAppLocale(
-        WidgetsBinding.instance.platformDispatcher.locales, const <Locale>[]);
+    // 用 Localizations.override 注入 AppLocalizations 委托(语言见 _locale)——
+    // 宿主 app 无需任何 l10n 配置即可使用本编辑器,语言也不受宿主 supportedLocales 限制。
     return Localizations.override(
       context: context,
-      locale: locale,
+      locale: _locale,
       delegates: AppLocalizations.localizationsDelegates,
       child: Builder(
         builder: (context) {

@@ -3,8 +3,12 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:runcam_gf/runcam_gf.dart'; // ParamsModel/桥接 + l10n(L.current)
+import 'package:runcam_gf/src/state/params_model.dart';
+import 'package:runcam_gf/src/state/engine_bridge.dart';
+import 'package:runcam_gf/src/state/engine_bridge_impl.dart';
+import 'package:runcam_gf/src/bridge/engine_api.g.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/l10n.dart';
 import 'preview_backend.dart';
 
 /// 编辑页控制器:持引擎生命周期 + ParamsModel + 当前预览后端。

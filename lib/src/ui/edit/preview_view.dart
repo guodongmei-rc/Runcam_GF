@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:runcam_gf/runcam_gf.dart'; // ParamsModel 扩展 getter(fov) + EditController + l10n
+import 'package:runcam_gf/src/state/params_model.dart'; // ParamsModel 扩展 getter(fov)
+import 'edit_controller.dart';
 import 'preview_backend.dart';
+import '../l10n/l10n.dart';
 
 /// 只负责"显示共享 stabilizer 的输出" + 预览 HUD(时间/帧号 + 缩放%)。
 /// 不引用 ParamsModel / 任何参数;HUD 数据从 controller 的只读 getter 取。

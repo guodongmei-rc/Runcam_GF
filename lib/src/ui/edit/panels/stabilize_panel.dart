@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:runcam_gf/runcam_gf.dart'; // ParamsModel + l10n + showAppToast
+import 'package:runcam_gf/src/state/params_model.dart';
+import '../../l10n/l10n.dart';
+import '../../toast.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
 

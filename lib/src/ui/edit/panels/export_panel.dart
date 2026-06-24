@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:runcam_gf/runcam_gf.dart'; // ParamsModelAdvanced 扩展 + EditController + l10n
+import 'package:runcam_gf/src/state/params_model.dart'; // ParamsModelAdvanced 扩展(导出组)
+import '../edit_controller.dart';
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
+import '../../l10n/l10n.dart';
 
 /// 「导出设置」面板(对齐官方 Export.qml 红框):编码器 / 输出大小(宽×高+锁定+预设)/
 /// 比特率 / 使用GPU编码 / 导出音频 / 高级选项(插值、音频编码、关键帧间隔)。
