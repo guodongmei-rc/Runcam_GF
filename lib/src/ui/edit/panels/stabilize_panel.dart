@@ -106,8 +106,8 @@ class _StabilizePanelState extends State<StabilizePanel> {
                 min: 0.01, max: 10, precision: 2,
                 value: m.plain3dTimeConstant,
                 onChanged: (v) => m.plain3dTimeConstant = v,
-                onTitleDoubleTap:
-                    _reset('plain3dTimeConstant', (v) => m.plain3dTimeConstant = v),
+                onTitleDoubleTap: _resetDefault(
+                    ParamsDefaults.plain3dTimeConstant, (v) => m.plain3dTimeConstant = v),
               ),
             // 固定摄像头(3):用角度替代平滑度,顺序 Roll/Pitch/Yaw,双击标题回默认值。
             if (method == 3) ...[
