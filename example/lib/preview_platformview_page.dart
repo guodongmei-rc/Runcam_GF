@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:runcam_gf/runcam_gf.dart';
-
-import 'l10n/l10n.dart';
-import 'toast.dart';
+import 'package:runcam_gf/runcam_gf.dart'; // 含 l10n(L/context.l10n)与 showAppToast
 
 /// 预览 PlatformView (dev):对照 Texture 路。
 ///

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:runcam_gf/runcam_gf.dart'; // ParamsModelAdvanced 扩展(同步组 getter/setter)
-import '../edit_controller.dart';
+import 'package:runcam_gf/runcam_gf.dart'; // ParamsModelAdvanced 扩展 + EditController + l10n
 import '../gyro_widgets.dart';
 import '../gyroflow_theme.dart';
-import '../../l10n/l10n.dart';
 
 /// 同步模块(对齐官方 Synchronization.qml):自动同步(+自动选点复选框) + 粗略偏移/搜索尺寸/
 /// 最大同步点数(输入框 + 各自复选框) + 「高级选项」展开(每N帧/每点时长/分辨率/光流/位姿/偏移/

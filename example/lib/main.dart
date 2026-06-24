@@ -4,9 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:runcam_gf/runcam_gf.dart';
 import 'package:toastification/toastification.dart';
 
-import 'l10n/l10n.dart';
-import 'toast.dart';
-import 'preview_page.dart';
+// l10n / showAppToast / PreviewPage 现由插件 barrel 导出(编辑器 UI 已并入插件)。
 import 'preview_platformview_page.dart';
 
 void main() {

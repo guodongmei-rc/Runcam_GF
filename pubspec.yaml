@@ -2,6 +2,9 @@ name: runcam_gf
 description: "RuncamGF — Gyroflow 视频防抖原生集成(iOS/Android)Flutter 插件。"
 version: 0.1.0
 homepage: https://gyroflow.xyz
+# 私有分发(path/git 依赖):编辑器吐司用了 toastification 的 git fork,
+# 故不发布到 pub.dev。宿主以 path 或 git 依赖本插件。
+publish_to: 'none'
 
 environment:
   sdk: ^3.11.1
@@ -10,6 +13,17 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # 共享编辑器 UI(lib/src/ui)随插件发布所需的运行时依赖。
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  flutter_svg: ^2.0.10
+  shared_preferences: ^2.5.5
+  # 吐司
+  toastification:
+    git:
+      url: https://github.com/guodongmei-rc/toastification.git
+      ref: main
 
 dev_dependencies:
   flutter_test:
@@ -34,6 +48,13 @@ flutter:
   # This is required for using `dart:ffi`.
   # All these are used by the tooling to maintain consistency when
   # adding or updating assets for this project.
+  # 生成本地化代码(读取 lib/src/ui/l10n/*.arb,见 l10n.yaml)。
+  generate: true
+
+  # 编辑器 UI 图标(以 package 资源形式随插件发布:packages/runcam_gf/assets/icons/...)。
+  assets:
+    - assets/icons/
+
   plugin:
     platforms:
       android:

@@ -54,7 +54,24 @@ class _PreviewPageState extends State<PreviewPage>
 
   @override
   Widget build(BuildContext context) {
-    return Theme(data: gyroflowTheme(), child: Builder(builder: _buildBody));
+    // 插件自带本地化:按项目规则(仅简体中文显中文,其余一律英文)就地解析语言,
+    // 再用 Localizations.override 注入 AppLocalizations 委托 —— 宿主 app 无需任何
+    // l10n 配置即可使用本编辑器,语言也不受宿主 supportedLocales 限制。
+    final locale = resolveAppLocale(
+        WidgetsBinding.instance.platformDispatcher.locales, const <Locale>[]);
+    return Localizations.override(
+      context: context,
+      locale: locale,
+      delegates: AppLocalizations.localizationsDelegates,
+      child: Builder(
+        builder: (context) {
+          // 供无 BuildContext 的状态层(EditController 等)取译文。
+          L.current = AppLocalizations.of(context)!;
+          return Theme(
+              data: gyroflowTheme(), child: Builder(builder: _buildBody));
+        },
+      ),
+    );
   }
 
   Widget _buildBody(BuildContext context) {
@@ -404,6 +421,7 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             child: svgAsset != null
                 ? SvgPicture.asset(svgAsset,
+                    package: 'runcam_gf', // 图标随插件以 package 资源发布
                     width: iconSize,
                     height: iconSize,
                     colorFilter: ColorFilter.mode(fg, BlendMode.srcIn))

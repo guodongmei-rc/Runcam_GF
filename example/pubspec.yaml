@@ -58,11 +58,7 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
-  # 生成本地化代码(读取 lib/l10n/*.arb,见 l10n.yaml)。
-  generate: true
-
-  assets:
-    - assets/icons/
+  # 本地化代码与编辑器图标已并入插件(runcam_gf)随包发布,example 不再自带。
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

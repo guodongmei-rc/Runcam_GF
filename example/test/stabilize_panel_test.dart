@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runcam_gf/runcam_gf.dart';
-import 'package:runcam_gf_example/edit/panels/stabilize_panel.dart';
-import 'package:runcam_gf_example/l10n/l10n.dart';
+import 'package:runcam_gf/runcam_gf.dart'; // 含 l10n 导出
+import 'package:runcam_gf/src/ui/edit/panels/stabilize_panel.dart';
 
 /// 不接真引擎:空实现桥,只让 ParamsModel 能跑。
 class _NoopBridge implements EngineBridge {

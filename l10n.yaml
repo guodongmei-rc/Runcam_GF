@@ -1,6 +1,7 @@
 # Flutter 本地化代码生成配置(flutter gen-l10n 读取)。
+# 编辑器 UI 已并入本插件,故 ARB 与生成代码随插件发布;宿主无需自带翻译。
 # app_en.arb 为模板(英文,源语言),app_zh.arb 为简体中文翻译。
-arb-dir: lib/l10n
+arb-dir: lib/src/ui/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 output-class: AppLocalizations
