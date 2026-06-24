@@ -113,7 +113,7 @@ class _PreviewPageState extends State<PreviewPage>
             ),
           ),
           // 加载视频蒙版(转圈)。
-          if (_c.busy) _busyOverlay(context.l10n.prevLoadingVideo),
+          if (_c.busy) _busyOverlay(L.current.prevLoadingVideo),
           // 自动同步蒙版「分析中…」(对齐原生 syncOverlay)。
           if (_c.autosyncRunning) _autosyncOverlay(),
           // 导出蒙版「导出中…」(对齐原生导出进度遮罩)。
@@ -206,7 +206,7 @@ class _PreviewPageState extends State<PreviewPage>
         children: [
           _ctrlBtn(
             icon: _c.playing ? Icons.pause : Icons.play_arrow,
-            label: _c.playing ? context.l10n.prevPause : context.l10n.prevPlay,
+            label: _c.playing ? L.current.prevPause : L.current.prevPlay,
             active: _c.playing,
             onTap: _c.uri == null ? null : _c.togglePlay,
             height: h,
@@ -215,7 +215,7 @@ class _PreviewPageState extends State<PreviewPage>
           const SizedBox(width: 8),
           _ctrlBtn(
             svgAsset: 'assets/icons/fov-overview.svg', // 官方稳定概览图标
-            label: context.l10n.prevStabOverview,
+            label: L.current.prevStabOverview,
             active: _c.fovOverview,
             onTap: _c.uri == null ? null : _c.toggleFovOverview,
             height: h,
@@ -224,7 +224,7 @@ class _PreviewPageState extends State<PreviewPage>
           const SizedBox(width: 8),
           _ctrlBtn(
             svgAsset: 'assets/icons/gyroflow.svg', // 官方防抖图标
-            label: context.l10n.prevStabilization,
+            label: L.current.prevStabilization,
             active: _c.stabEnabled,
             onTap: _c.uri == null ? null : _c.toggleStab,
             height: h,
@@ -240,7 +240,7 @@ class _PreviewPageState extends State<PreviewPage>
                 : () {
                     _c.cycleBackgroundMode();
                     if (!_c.fovOverview) {
-                      _toast(context.l10n.prevEnableOverviewHint);
+                      _toast(L.current.prevEnableOverviewHint);
                     }
                   },
             height: h,
@@ -250,7 +250,7 @@ class _PreviewPageState extends State<PreviewPage>
           // 裁剪开关:开启→时间线显示选区(默认居中 1/3)可拖动调整,导出仅该段;关闭→导出整片。
           _ctrlBtn(
             icon: Icons.content_cut,
-            label: context.l10n.prevTrim,
+            label: L.current.prevTrim,
             active: _c.trimEnabled,
             onTap: _c.uri == null ? null : _c.toggleTrim,
             height: h,
@@ -304,9 +304,9 @@ class _PreviewPageState extends State<PreviewPage>
         compact: compact,
         onChanged: (i) => setState(() => _tab = i),
         tabs: [
-          (icon: Icons.videocam_outlined, label: context.l10n.prevTabInput),
-          (icon: Icons.settings_outlined, label: context.l10n.prevTabParams),
-          (icon: Icons.file_download_outlined, label: context.l10n.prevTabExport),
+          (icon: Icons.videocam_outlined, label: L.current.prevTabInput),
+          (icon: Icons.settings_outlined, label: L.current.prevTabParams),
+          (icon: Icons.file_download_outlined, label: L.current.prevTabExport),
         ],
       );
 
@@ -522,19 +522,19 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             const SizedBox(height: 14),
             Text(
-                context.l10n.prevAnalyzing(pct, '${_c.autosyncReady}',
+                L.current.prevAnalyzing(pct, '${_c.autosyncReady}',
                     '${_c.autosyncTotal}', fps),
                 style: const TextStyle(color: GfColors.text, fontSize: 14)),
             const SizedBox(height: 6),
             Text(
-                context.l10n.prevElapsedRemaining(
+                L.current.prevElapsedRemaining(
                     '${_c.autosyncElapsedSec}', '${_c.autosyncRemainingSec}'),
                 style:
                     const TextStyle(color: GfColors.textSecondary, fontSize: 12)),
             const SizedBox(height: 10),
             TextButton(
               onPressed: _c.cancelAutosync,
-              child: Text(context.l10n.prevCancel,
+              child: Text(L.current.prevCancel,
                   style: const TextStyle(color: GfColors.accent)),
             ),
           ],
@@ -570,19 +570,19 @@ class _PreviewPageState extends State<PreviewPage>
             ),
             const SizedBox(height: 14),
             Text(
-                context.l10n.prevExporting(pct, '${_c.exportFrame}',
+                L.current.prevExporting(pct, '${_c.exportFrame}',
                     '${_c.exportTotal}', fps),
                 style: const TextStyle(color: GfColors.text, fontSize: 14)),
             const SizedBox(height: 6),
             Text(
-                context.l10n.prevElapsedRemaining(
+                L.current.prevElapsedRemaining(
                     '${_c.exportElapsedSec}', '${_c.exportRemainingSec}'),
                 style:
                     const TextStyle(color: GfColors.textSecondary, fontSize: 12)),
             const SizedBox(height: 10),
             TextButton(
               onPressed: _c.cancelExport,
-              child: Text(context.l10n.prevCancel,
+              child: Text(L.current.prevCancel,
                   style: const TextStyle(color: GfColors.accent)),
             ),
           ],
