@@ -211,7 +211,7 @@
   "@ctlAutosyncComplete": { "placeholders": { "count": { "type": "String" }, "ms": { "type": "String" } } },
   "ctlAutosyncNoOffset": "Auto sync found no offset",
   "ctlLensWrongType": "Please select a .json lens profile",
-  "ctlMotionWrongType": "Please select a .gcsv motion file",
+  "ctlMotionWrongType": "Please select a motion file (.gcsv/.bbl/.bfl/.csv)",
 
   "inputVideoInfo": "Video information",
   "inputOpenFile": "Open file",

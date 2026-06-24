@@ -699,6 +699,9 @@ class EditController extends ChangeNotifier {
       if (lensDoAutosync && hasGyro && rawImu && !autosyncRunning) {
         await _startAutosync(picked);
       }
+      // 本视频无内嵌陀螺、但之前已授权过目录 → 自动重扫该目录里本视频的同名 sidecar
+      // (无需再次弹授权框)。扫到则加载并重算/刷新/按需补跑 autosync。
+      await _autoRescanSidecars(picked);
     } catch (e) {
       status = L.current.ctlFailed('$e');
     } finally {
@@ -807,6 +810,11 @@ class EditController extends ChangeNotifier {
   // controller 也保留)。对齐用户预期「授权过就不再要求授权」。
   static bool _folderAuthorized = false;
 
+  // 已授权目录路径(安卓 SAF tree uri / iOS file:// 目录)。授权后整会话保留,
+  // 供打开新视频时自动重扫该目录里本视频的同名 sidecar(目录已在原生白名单内,
+  // 无需再次授权)。修复:授权一次后换视频不再出现蓝框、也不自动匹配新视频 sidecar。
+  static String? _authorizedFolder;
+
   /// 视频信息蓝色授权提示框是否显示(对齐原生 refreshVideoDirHint:缺运动数据或
   /// 镜头档案 → 引导授权;已授权过则不再显示)。
   bool get showVideoDirHint =>
@@ -825,34 +833,9 @@ class EditController extends ChangeNotifier {
       final folder = await _picker.invokeMethod<String>('pickFolder');
       if (folder == null) return; // 用户取消(不置已授权)
       _folderAuthorized = true; // 授权后不再显示蓝框(无论是否扫到文件)
+      _authorizedFolder = folder; // 记住目录,供后续视频自动重扫(见 _autoRescanSidecars)
       await _bridge.folderAccessGranted(folder); // 注册白名单(否则下面读不到文件)
-      final base = _videoBaseName();
-      final scanJson = await _picker.invokeMethod<String>(
-          'scanFolderForSidecars', {'folder': folder, 'base': base});
-      debugPrint('[dirAuth] folder=$folder base=$base scan=$scanJson');
-      final scan = scanJson != null ? jsonDecode(scanJson) : null;
-      final motionPath = (scan is Map) ? scan['motionPath'] as String? : null;
-      final lensPath = (scan is Map) ? scan['lensPath'] as String? : null;
-      // 运动数据:扫到就加载并更新「运动数据」面板状态(对齐 openMotionFile)。
-      if (motionPath != null && motionPath.isNotEmpty) {
-        await _bridge.loadGyro(motionPath, loadAllMetadata);
-        _motionFilePath = motionPath;
-        motionFileName = _lastSegment(motionPath);
-        // 检测到的格式 = telemetry 检测源(对齐桌面),取不到退回扩展名。
-        final ext = _extOf(motionPath);
-        motionFormat = (await _detectedMotionSource()) ??
-            (ext.isNotEmpty ? ext : 'IMU sidecar');
-        debugPrint('[dirAuth] 已加载运动数据: $motionFileName (格式=$motionFormat)');
-        // gcsv 带来相机身份(camera_id)→ 从内置库自动加载镜头(RunCam6 这类视频本身
-        // 无 telemetry、镜头不是 .json 文件的机型,对齐 ViewController.mm:914)。
-        final lr = await _bridge.autoloadLensForCamera();
-        debugPrint('[dirAuth] autoloadLensForCamera rc=$lr');
-      }
-      // 若目录里有同名 .json 镜头档案(部分机型),加载它覆盖(用户显式授权=以扫到的为准)。
-      if (lensPath != null && lensPath.isNotEmpty) {
-        final r = await _bridge.loadLens(lensPath);
-        debugPrint('[dirAuth] 已加载镜头 json: $lensPath -> $r');
-      }
+      final found = await _scanAndLoadSidecars(folder);
       await _bridge.recomputeBlocking();
       await _fetchLensInfo();
       await _fetchGyroInfo();
@@ -864,8 +847,8 @@ class EditController extends ChangeNotifier {
       if (lensDoAutosync && hasGyro && rawImu && !autosyncRunning) {
         await _startAutosync(uri!);
       } else {
-        status = (motionPath == null && lensPath == null)
-            ? L.current.ctlNoSidecarFound(base)
+        status = !found
+            ? L.current.ctlNoSidecarFound(_videoBaseName())
             : L.current.ctlFolderSidecarLoaded;
       }
     } catch (e) {
@@ -873,6 +856,61 @@ class EditController extends ChangeNotifier {
     } finally {
       _setBusy(false);
       notifyListeners();
+    }
+  }
+
+  /// 在 [folder] 里扫描当前视频同名 sidecar(运动数据/镜头 json)并加载。
+  /// 返回是否扫到任意文件。供首次授权(authorizeVideoFolder)与打开新视频后的
+  /// 自动重扫(_autoRescanSidecars)复用;不负责 recompute/刷新(由调用方按需做)。
+  Future<bool> _scanAndLoadSidecars(String folder) async {
+    final base = _videoBaseName();
+    final scanJson = await _picker.invokeMethod<String>(
+        'scanFolderForSidecars', {'folder': folder, 'base': base});
+    debugPrint('[dirAuth] folder=$folder base=$base scan=$scanJson');
+    final scan = scanJson != null ? jsonDecode(scanJson) : null;
+    final motionPath = (scan is Map) ? scan['motionPath'] as String? : null;
+    final lensPath = (scan is Map) ? scan['lensPath'] as String? : null;
+    // 运动数据:扫到就加载并更新「运动数据」面板状态(对齐 openMotionFile)。
+    if (motionPath != null && motionPath.isNotEmpty) {
+      await _bridge.loadGyro(motionPath, loadAllMetadata);
+      _motionFilePath = motionPath;
+      motionFileName = _lastSegment(motionPath);
+      // 检测到的格式 = telemetry 检测源(对齐桌面),取不到退回扩展名。
+      final ext = _extOf(motionPath);
+      motionFormat = (await _detectedMotionSource()) ??
+          (ext.isNotEmpty ? ext : 'IMU sidecar');
+      debugPrint('[dirAuth] 已加载运动数据: $motionFileName (格式=$motionFormat)');
+      // gcsv 带来相机身份(camera_id)→ 从内置库自动加载镜头(RunCam6 这类视频本身
+      // 无 telemetry、镜头不是 .json 文件的机型,对齐 ViewController.mm:914)。
+      final lr = await _bridge.autoloadLensForCamera();
+      debugPrint('[dirAuth] autoloadLensForCamera rc=$lr');
+    }
+    // 若目录里有同名 .json 镜头档案(部分机型),加载它覆盖(用户显式授权=以扫到的为准)。
+    if (lensPath != null && lensPath.isNotEmpty) {
+      final r = await _bridge.loadLens(lensPath);
+      debugPrint('[dirAuth] 已加载镜头 json: $lensPath -> $r');
+    }
+    return (motionPath != null && motionPath.isNotEmpty) ||
+        (lensPath != null && lensPath.isNotEmpty);
+  }
+
+  /// 打开新视频后:若已授权过目录、且本视频无内嵌陀螺,则用已授权目录自动重扫
+  /// 本视频的同名 sidecar 并加载(目录已在白名单/scoped,静默完成)。修复「授权一次后
+  /// 换视频不再出现蓝框、新视频 sidecar 不自动匹配」。扫到才重算/刷新/补跑 autosync。
+  Future<void> _autoRescanSidecars(String videoUri) async {
+    if (hasGyro || !_folderAuthorized || _authorizedFolder == null) return;
+    final found = await _scanAndLoadSidecars(_authorizedFolder!);
+    if (!found) return;
+    await _bridge.recomputeBlocking();
+    await _fetchLensInfo();
+    await _fetchGyroInfo();
+    await _fetchGyroTimeline();
+    _gyroDataDetected = _hasGyroAngles; // 重判陀螺锁存(运动数据已载入)
+    _refreshPreview();
+    await _fetchPreviewStateOnce();
+    final rawImu = await _isRawImu();
+    if (lensDoAutosync && hasGyro && rawImu && !autosyncRunning) {
+      await _startAutosync(videoUri);
     }
   }
 
@@ -1096,7 +1134,9 @@ class EditController extends ChangeNotifier {
     if (uri == null || busy) return;
     final picked = await _picker.invokeMethod<String>('pickMotionFile');
     if (picked == null) return;
-    if (_extOf(picked) != 'GCSV') {
+    // 接受全部受支持的运动数据格式(与目录扫描 scanFolderForSidecars 的 motionExts 对齐)。
+    const motionExts = {'GCSV', 'BBL', 'BFL', 'CSV'};
+    if (!motionExts.contains(_extOf(picked))) {
       status = L.current.ctlMotionWrongType;
       notifyListeners();
       return;

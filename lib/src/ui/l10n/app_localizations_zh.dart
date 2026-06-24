@@ -547,7 +547,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ctlLensWrongType => '请选择 .json 镜头档案';
 
   @override
-  String get ctlMotionWrongType => '请选择 .gcsv 运动数据文件';
+  String get ctlMotionWrongType => '请选择运动数据文件 (.gcsv/.bbl/.bfl/.csv)';
 
   @override
   String get inputVideoInfo => '视频信息';

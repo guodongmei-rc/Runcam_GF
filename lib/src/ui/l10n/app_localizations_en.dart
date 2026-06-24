@@ -551,7 +551,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ctlLensWrongType => 'Please select a .json lens profile';
 
   @override
-  String get ctlMotionWrongType => 'Please select a .gcsv motion file';
+  String get ctlMotionWrongType => 'Please select a motion file (.gcsv/.bbl/.bfl/.csv)';
 
   @override
   String get inputVideoInfo => 'Video information';
