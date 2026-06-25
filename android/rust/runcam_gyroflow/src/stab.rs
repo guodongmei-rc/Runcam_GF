@@ -1742,8 +1742,23 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeProcessFrame<
         }
         // 全 GPU 路径: gyroflow 算每帧变换(CPU) → 我们的 wgpu 设备 undistort + 显示
         let msg = match get_transform(timestamp_us) {
-            Some((kp, matrices, mesh, dm, drawing)) => {
-                match crate::preview::process_frame_gpu(&yd, &ud, &vd, &kp, &matrices, &mesh, &drawing, &dm) {
+            Some((mut kp, matrices, mesh, dm, drawing)) => {
+                // [关键提速] 预览跳过逐像素镜头网格样条(interpolate_mesh)。带"畸变网格"的镜头档案
+                // (如此 Sony 视频)每个输出像素要做 ~20 次三次样条求解 → 1080P ~199ms = 唯一卡顿源;
+                // 不带网格的镜头(别的视频)走解析模型, 每像素很便宜 → 不卡。预览传空 mesh + 清 512 标志
+                // → 着色器跳过它 → 1080P 也不卡。预览畸变略降精度; 导出走 nativeRenderFrameI420 仍用
+                // 完整 mesh(全分辨率 + 全精度, 不受影响)。
+                {
+                    use std::sync::atomic::{AtomicBool, Ordering as O};
+                    static L: AtomicBool = AtomicBool::new(false);
+                    if !L.swap(true, O::Relaxed) {
+                        log::info!("[mesh-skip] 预览跳过镜头网格样条: mesh_len={} flag512={}",
+                            mesh.len(), (kp.flags & 512) != 0);
+                    }
+                }
+                kp.flags &= !512;
+                let empty_mesh: Vec<f32> = Vec::new();
+                match crate::preview::process_frame_gpu(&yd, &ud, &vd, &kp, &matrices, &empty_mesh, &drawing, &dm) {
                     Ok(()) => "frame ok (gpu)".to_string(),
                     Err(e) => format!("frame FAIL: {e}"),
                 }
