@@ -27,7 +27,8 @@ class PreviewView extends StatelessWidget {
     final Widget preview;
     if (c.backend == PreviewBackend.texture) {
       if (c.textureId == null) {
-        return const Center(child: CircularProgressIndicator());
+        // 纹理未就绪(切换视频的瞬态):显示黑底而非转圈,避免主线程繁忙时动画卡顿。
+        return const ColoredBox(color: Colors.black);
       }
       preview = Center(
         child: AspectRatio(
