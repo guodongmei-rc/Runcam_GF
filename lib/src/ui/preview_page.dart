@@ -521,10 +521,22 @@ class _PreviewPageState extends State<PreviewPage>
               ),
             ),
             const SizedBox(height: 14),
-            Text(
-                L.current.prevAnalyzing(pct, '${_c.autosyncReady}',
-                    '${_c.autosyncTotal}', fps),
-                style: const TextStyle(color: GfColors.text, fontSize: 14)),
+            Builder(builder: (_) {
+              // 「分析中 X%...」正常字号(14);括号内「(帧/总 @ fps)」小 6 像素(8),对齐导出蒙版。
+              final full = L.current.prevAnalyzing(
+                  pct, '${_c.autosyncReady}', '${_c.autosyncTotal}', fps);
+              final i = full.indexOf('(');
+              final head = i >= 0 ? full.substring(0, i) : full;
+              final paren = i >= 0 ? full.substring(i) : '';
+              return Text.rich(TextSpan(
+                style: const TextStyle(color: GfColors.text, fontSize: 14),
+                children: [
+                  TextSpan(text: head),
+                  if (paren.isNotEmpty)
+                    TextSpan(text: paren, style: const TextStyle(fontSize: 8)),
+                ],
+              ));
+            }),
             const SizedBox(height: 6),
             Text(
                 L.current.prevElapsedRemaining(
