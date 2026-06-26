@@ -134,6 +134,10 @@ class GyroflowAutosync(
         val format = extractor.getTrackFormat(track)
         val mime = format.getString(MediaFormat.KEY_MIME) ?: throw IllegalStateException("未知编码")
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+        // 同预览解码器:降低 4K60 解码器资源预留,避免在已被 wgpu+Flutter 占用的进程里 start() OOM(−12)。
+        // autosync 只按范围抽帧分析,更不需要实时 60fps 吞吐。
+        format.setInteger(MediaFormat.KEY_OPERATING_RATE, 30)
+        format.setInteger(MediaFormat.KEY_PRIORITY, 1)
         val codec = MediaCodec.createDecoderByType(mime)
         codec.configure(format, null, null, 0)
         codec.start()

@@ -155,19 +155,26 @@ class GyroflowExporter(
         val trimDurUs = (endForCount - effStart).coerceAtLeast(0L)
 
         // 对齐官方: 稳定用夹后尺寸(取景固定, 与预览一致), 回读时 GPU 放大到目标分辨率编码。
-        val outW = s.outW and 1.inv()
-        val outH = s.outH and 1.inv()
         GyroflowNative.nativeSetOutputSize(s.outW, s.outH)   // 稳定: 夹到源内 → 取景固定
-        GyroflowNative.nativeSetExportTarget(outW, outH)     // 回读: 放大到用户选的尺寸(如 8K)
+        val reqW = s.outW and 1.inv()
+        val reqH = s.outH and 1.inv()
 
         // 编码器
         val mime = if (s.codecIndex == 0) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC
+        // 把导出尺寸/帧率夹到编码器**真实能力**内:部分设备(如此华为)硬件编码器上限远低于解码器
+        // (常见只到 1080p)。直接按源 4K 配会 start() 过、一喂真帧就 IllegalStateException →
+        // 先按宽高比缩到支持范围, 导出虽降分辨率但能成。日志会打出编码器真实上限。
+        val (outW, outH, encFps) = clampToEncoder(mime, reqW, reqH, fps)
+        GyroflowNative.nativeSetExportTarget(outW, outH)     // 回读: 放大到(夹后)目标尺寸编码
         val encFormat = MediaFormat.createVideoFormat(mime, outW, outH).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
             val bps = (if (s.bitrateMbps > 0) s.bitrateMbps else 64) * 1_000_000
             setInteger(MediaFormat.KEY_BIT_RATE, bps)
-            setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+            setInteger(MediaFormat.KEY_FRAME_RATE, encFps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1s 一个关键帧
+            // 后台导出非实时:降编码器资源预留(配合上面的尺寸夹取一起避免 OOM / 运行期错误态)。
+            setInteger(MediaFormat.KEY_PRIORITY, 1)
+            setInteger(MediaFormat.KEY_OPERATING_RATE, 30)
         }
         val encoder = MediaCodec.createEncoderByType(mime)
         encoder.configure(encFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -178,6 +185,10 @@ class GyroflowExporter(
         // 裁剪起点: seek 到 ≤effStart 的关键帧(解码须从关键帧起; 区间前的帧在入队时丢弃)。
         if (effStart > 0L) vExtractor.seekTo(effStart, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         vFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+        // 降 4K60 源解码器资源预留(避免在 wgpu 占用下 start() OOM −12)。导出瓶颈在 GPU 去畸变+编码,
+        // 解码不是瓶颈,故降 OPERATING_RATE 到 30 几乎不影响导出速度。
+        vFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, 30)
+        vFormat.setInteger(MediaFormat.KEY_PRIORITY, 1)
         val decoder = MediaCodec.createDecoderByType(vFormat.getString(MediaFormat.KEY_MIME)!!)
         decoder.configure(vFormat, null, null, 0)
         decoder.start()
@@ -373,6 +384,58 @@ class GyroflowExporter(
         aExtractor?.release()
         finalize() // MediaStore: 清 IS_PENDING / 旧版: 媒体扫描
         return outUri
+    }
+
+    /**
+     * 把请求的导出尺寸/帧率夹到编码器**真实能力**内, 返回 (w, h, fps)。
+     * 部分设备(如此华为)硬件编码器上限远低于解码器(常见只到 1080p):按源 4K 直接配会 start()
+     * 通过、但一喂真帧就转入错误态(feedEncoder 首个 dequeueInputBuffer 抛 IllegalStateException)。
+     * 策略:① 按宽高比缩到 max 宽/高内;② 优先保尺寸、把帧率夹到该尺寸支持上限;③ 若尺寸本身仍超
+     * 能力, 逐步缩小直到 areSizeAndRateSupported。查询失败则原样返回(不拦截, 交由原逻辑)。
+     */
+    private fun clampToEncoder(mime: String, w: Int, h: Int, fps: Int): Triple<Int, Int, Int> {
+        return try {
+            val enc = MediaCodec.createEncoderByType(mime)
+            val vc = enc.codecInfo.getCapabilitiesForType(mime).videoCapabilities
+            enc.release()
+            val wa = vc.widthAlignment.coerceAtLeast(2)
+            val ha = vc.heightAlignment.coerceAtLeast(2)
+            fun align(v: Int, a: Int) = ((v / a) * a).coerceAtLeast(a)
+            fun maxRateFor(ww: Int, hh: Int): Int =
+                try { vc.getSupportedFrameRatesFor(ww, hh).upper.toInt() } catch (_: Throwable) { fps }
+
+            var ow = w
+            var oh = h
+            // ① 缩到 max 宽/高内(保持宽高比)
+            val maxW: Int = vc.supportedWidths.upper
+            val maxH: Int = vc.supportedHeights.upper
+            if (ow > maxW || oh > maxH) {
+                val scale = minOf(maxW.toDouble() / ow, maxH.toDouble() / oh)
+                ow = (ow * scale).toInt()
+                oh = (oh * scale).toInt()
+            }
+            ow = align(ow, wa); oh = align(oh, ha)
+            // ② 帧率夹到该尺寸支持上限(优先保分辨率、降帧率)
+            var of = fps.coerceAtMost(maxRateFor(ow, oh).coerceAtLeast(1))
+            // ③ 尺寸本身仍超能力 → 逐步缩(每步 ~90%), 每步重夹帧率
+            var guard = 0
+            while (guard++ < 48 && ow > 320 && oh > 240 &&
+                !vc.areSizeAndRateSupported(ow, oh, of.toDouble())) {
+                ow = align((ow * 9) / 10, wa)
+                oh = align((oh * 9) / 10, ha)
+                of = fps.coerceAtMost(maxRateFor(ow, oh).coerceAtLeast(1))
+            }
+            if (ow != w || oh != h || of != fps) {
+                Log.w(TAG, "导出尺寸/帧率夹到编码器能力: 请求 ${w}x$h@$fps → ${ow}x$oh@$of " +
+                    "(编码器 $mime maxW=$maxW maxH=$maxH)")
+            } else {
+                Log.i(TAG, "编码器 $mime 支持 ${w}x$h@$fps(maxW=$maxW maxH=$maxH), 不夹取")
+            }
+            Triple(ow, oh, of)
+        } catch (e: Throwable) {
+            Log.w(TAG, "查询编码器能力失败, 原样导出 ${w}x$h@$fps", e)
+            Triple(w, h, fps)
+        }
     }
 
     // ── 编码器输入: I420 → getInputImage(尊重 plane stride) ──

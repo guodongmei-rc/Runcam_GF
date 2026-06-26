@@ -332,6 +332,14 @@ class EditController extends ChangeNotifier {
       await _bridge.setOutputSizeExact(pw, ph); // 导出改成了全分辨率,恢复预览尺寸
       await _bridge.recomputeBlocking();
       playing = false; // 导出后保持暂停,等用户手动播放
+      // 导出会释放预览解码器(pauseForExport),收尾时 resumeAfterExport 重建的是**全新**解码器,
+      // 默认只渲第一帧(t=0)→ 画面跳回开头,但 UI 进度条(_playheadUs)还停在原位 → 对不上。
+      // 故 seek 回 _playheadUs,让重建后的解码器渲染用户原来所在的帧,画面与进度条一致。
+      // 并夹到有效区间 [_playStartUs, _playEndUs](与 seekToProgress 一致):有裁剪框时进度条
+      // 只在选区内,导出后恢复也保持同样约束,不让播放头落到选区外。
+      final lo = _playStartUs, hi = _playEndUs;
+      if (hi > 0) _playheadUs = _playheadUs.clamp(lo, hi);
+      await _seekBackend(_playheadUs);
       _refreshPreview(); // 暂停态重渲当前帧(纹理仍在,无转圈)
       await _fetchPreviewStateOnce();
     } catch (_) {/* 恢复失败:预览可能需重开视频 */}

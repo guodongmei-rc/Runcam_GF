@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.runcam.runcam.AudioPlayer
+import com.runcam.runcam.FrameDecoder
+import com.runcam.runcam.GlVideoDecoder
 import com.runcam.runcam.GyroflowNative
 import com.runcam.runcam.VideoDecoder
 import io.flutter.view.TextureRegistry
@@ -33,7 +35,7 @@ class PreviewController(
     }
 
     private var producer: TextureRegistry.SurfaceProducer? = null
-    private var decoder: VideoDecoder? = null
+    private var decoder: FrameDecoder? = null
     private var audio: AudioPlayer? = null
     private var uri: Uri? = null
     private var outW = 0
@@ -75,15 +77,29 @@ class PreviewController(
         return Triple(p.id(), outW, outH)
     }
 
+    // 解码帧 → 喂引擎(两种解码器共用)。已拆除/导出中不喂(导出动同一单例引擎,不可并发)。
+    private val frameSink: (com.runcam.runcam.YuvPacker.Frame, Long) -> Unit = { frame, ptsUs ->
+        if (!tornDown && !exporting) {
+            val res = GyroflowNative.nativeProcessFrame(frame.y, frame.u, frame.v, frame.width, frame.height, ptsUs)
+            if (res != null && res.startsWith("frame FAIL")) Log.e(TAG, res)
+            produceCount.incrementAndGet()
+        }
+    }
+
     // 起(或重起)解码线程 + 音频线程(默认暂停)。导出释放预览解码器后用它重建。
     private fun startDecoderAndAudio() {
         val u = uri ?: return
-        val d = VideoDecoder(context, u) { frame, ptsUs ->
-            // 已拆除/导出中:不喂帧(导出动同一单例引擎,不可并发)。
-            if (!tornDown && !exporting) {
-                val res = GyroflowNative.nativeProcessFrame(frame.y, frame.u, frame.v, frame.width, frame.height, ptsUs)
-                if (res != null && res.startsWith("frame FAIL")) Log.e(TAG, res)
-                produceCount.incrementAndGet()
+        val d = VideoDecoder(context, u, frameSink)
+        d.onEnd = { audio?.resetToStart() }
+        // 硬解 ByteBuffer 对该流 start 失败(已彻底释放)→ 切到 GPU 解码路(解到 SurfaceTexture → GL 回读)。
+        // 此时失败的硬解已释放干净,GlVideoDecoder 独占硬件解码器,无并发争用(对齐官方"解码到 GPU")。
+        d.onStartFailed = {
+            if (!tornDown && decoder === d) {
+                Log.w(TAG, "ByteBuffer decode start failed → fallback to GlVideoDecoder")
+                val gl = GlVideoDecoder(context, u, frameSink)
+                gl.onEnd = { audio?.resetToStart() }
+                decoder = gl
+                gl.start()
             }
         }
         decoder = d
@@ -91,8 +107,7 @@ class PreviewController(
         // 下次 play() 两者同时从 0 起。无音轨视频 AudioPlayer 自动为 no-op。
         val a = AudioPlayer(context, u)
         audio = a
-        d.onEnd = { a.resetToStart() }
-        d.start() // 起解码线程,默认暂停 → 渲首帧后停住(VideoDecoder firstShown 分支)
+        d.start() // 起解码线程,默认暂停 → 渲首帧后停住(firstShown 分支)
         a.start() // 起音频线程,默认暂停,随 play/pause/seek 同步
     }
 

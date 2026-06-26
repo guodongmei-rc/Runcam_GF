@@ -89,17 +89,23 @@ static STAB: Mutex<Option<Session>> = Mutex::new(None);
 /// 0.0 表示尚未渲染任何帧。
 static CURRENT_FOV: AtomicU64 = AtomicU64::new(0);
 
-/// 选择 wgpu(GPU)设备处理(对齐 iOS ensure_wgpu_device)。找不到则保持 CPU。
-/// gyroflow 在它自己的 wgpu 设备上处理(CPU 输入→GPU→CPU 输出), 不涉及跨设备共享。
+/// gyroflow_core 处理后端选择。
+///
+/// **重要(2026-06-26 修 4K60 黑屏)**:强制 gyroflow_core 走 **CPU**(set_device(-1))。
+/// 现架构下预览/导出的逐像素去畸变+稳定**不**走 gyroflow_core 的 GPU kernel —— 而是在
+/// `preview.rs` 自建的那块独立 wgpu(Vulkan)设备上用 `crate::undistort` 重新实现;
+/// gyroflow_core 这边只做 `get_transform`(`get_frame_transform_at`,BufferSource::None,纯 CPU 矩阵)
+/// 与 `recompute_blocking`(纯 CPU)。`process_pixels` 全程没人调。
+///
+/// 若让 gyroflow_core 选 wgpu,`init_size()` 会在**第二块 Vulkan 设备**上按全分辨率分配一套
+/// 稳定纹理 —— 对预览毫无用处,却白占图形/ION 内存。已实测确认:本机硬解 4K60 没问题
+/// (系统播放器流畅),但我们进程里这第二块设备 + 其纹理 + 预览设备占满图形内存后,
+/// 4K60 硬件解码器 `start()` 拿不到内存 → −12 NO_MEMORY → 黑屏(4K30/1080p 因解码器
+/// 预留更小而幸免)。强制 CPU 即释放这块冗余设备,把图形内存让给解码器。
+/// 代价:无(预览/导出本就不用 gyroflow_core GPU;recompute/transform 本就 CPU)。
 fn ensure_wgpu_device(manager: &StabilizationManager) {
-    let list = manager.stabilization.read().list_devices();
-    if let Some((idx, name)) = list.iter().enumerate().find(|(_, n)| n.starts_with("[wgpu]")) {
-        log::info!("GPU device [{idx}]: {name}");
-        manager.set_device(idx as i32);
-    } else {
-        log::warn!("未找到 wgpu 设备, 保持 CPU");
-        manager.set_device(-1);
-    }
+    manager.set_device(-1);
+    log::info!("gyroflow_core 强制 CPU(GPU 渲染在 preview.rs 独立设备上;省第二块 Vulkan 设备的图形内存给 4K60 解码器)");
 }
 
 fn open_video(url_in: &str) -> Result<String, String> {
