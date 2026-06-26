@@ -61,9 +61,11 @@ class VideoDecoder(
         if (t >= 0L) seekTargetUs = t
     }
 
+    @Volatile private var thread: Thread? = null
+
     fun start() {
         running = true
-        Thread { runLoop() }.start()
+        thread = Thread { runLoop() }.also { it.start() }
     }
 
     fun play() {
@@ -76,8 +78,16 @@ class VideoDecoder(
 
     fun isPlaying(): Boolean = playing
 
+    /**
+     * 停止并**等待**解码线程退出(其 finally 释放 MediaCodec)再返回。
+     * 关键:调用方(如导出/autosync 前的预览拆除)随后会立刻新起一个同分辨率解码器,
+     * 若此处不等待释放,部分设备并发 2 个全分辨率硬解会 MediaCodec.start() 失败。
+     * 不在解码线程自身调用(无死锁);join 设上限避免万一卡死。
+     */
     fun stop() {
         running = false
+        try { thread?.join(800) } catch (_: InterruptedException) {}
+        thread = null
     }
 
     private class Track(val index: Int, val format: MediaFormat)

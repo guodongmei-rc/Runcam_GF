@@ -70,7 +70,15 @@ class PreviewController(
         bindSurface()
 
         uri = toUri(uriOrPath)
-        val d = VideoDecoder(context, uri!!) { frame, ptsUs ->
+        startDecoderAndAudio() // 起解码 + 音频线程(默认暂停 → 渲首帧后停住)
+
+        return Triple(p.id(), outW, outH)
+    }
+
+    // 起(或重起)解码线程 + 音频线程(默认暂停)。导出释放预览解码器后用它重建。
+    private fun startDecoderAndAudio() {
+        val u = uri ?: return
+        val d = VideoDecoder(context, u) { frame, ptsUs ->
             // 已拆除/导出中:不喂帧(导出动同一单例引擎,不可并发)。
             if (!tornDown && !exporting) {
                 val res = GyroflowNative.nativeProcessFrame(frame.y, frame.u, frame.v, frame.width, frame.height, ptsUs)
@@ -81,13 +89,11 @@ class PreviewController(
         decoder = d
         // 音频随视频并行播放(对齐 iOS MDK 自带音频);视频放到结尾时把音频也复位到开头并暂停,
         // 下次 play() 两者同时从 0 起。无音轨视频 AudioPlayer 自动为 no-op。
-        val a = AudioPlayer(context, uri!!)
+        val a = AudioPlayer(context, u)
         audio = a
         d.onEnd = { a.resetToStart() }
         d.start() // 起解码线程,默认暂停 → 渲首帧后停住(VideoDecoder firstShown 分支)
         a.start() // 起音频线程,默认暂停,随 play/pause/seek 同步
-
-        return Triple(p.id(), outW, outH)
     }
 
     // 幂等重绑 wgpu 到当前 SurfaceProducer 的 surface:先 destroy 再 create(对齐旧页
@@ -114,17 +120,25 @@ class PreviewController(
         return produce.toLong() * 1000 + produce
     }
 
-    /** 导出前:停预览喂帧 + 暂停解码,避免与导出并发动单例引擎(对齐旧页 decoder?.pause())。 */
+    /**
+     * 重活(导出 / autosync,后者经 PreviewApiImpl.setExportMode 调用)开始前:
+     * 彻底**释放**预览解码器 + 音频(而非仅暂停)。
+     * 关键:部分设备(如高通)不能同时存在 2 个全分辨率硬件解码器实例——预览解码器若不释放,
+     * 重活再起一个同分辨率解码器时 MediaCodec.start() 会失败。surface/wgpu 绑定保留,不重建纹理。
+     */
     fun pauseForExport() {
         exporting = true
-        decoder?.pause()
-        audio?.pause() // 导出期间静音预览音频(导出自带音频处理)
+        decoder?.stop()
+        decoder = null
+        audio?.stop()
+        audio = null
     }
 
-    /** 导出结束:恢复预览喂帧(输出尺寸的恢复由 Dart 侧负责)。 */
+    /** 重活结束:重建预览解码器 + 音频(渲首帧;导出的输出尺寸恢复由 Dart 侧负责)。 */
     fun resumeAfterExport() {
         exporting = false
-        decoder?.rerender() // 用恢复后的输出尺寸重渲当前帧
+        if (tornDown) return
+        startDecoderAndAudio()
     }
 
     fun dispose() {

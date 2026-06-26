@@ -1301,6 +1301,15 @@ class EditController extends ChangeNotifier {
         'everyNth=${params.everyNthFrame} pose=${params.poseMethod} '
         'of=${params.ofMethod} offset=${params.offsetMethod} '
         'search=${params.syncSearchSizeSec} init=${params.gyroOffsetMs}');
+    // 释放预览解码器(让出硬件解码器)→ autosync 自己的解码器才能 start 成功:部分设备(如高通)
+    // 不能同时存在 2 个全分辨率硬件解码器,预览解码器不释放则 MediaCodec.start() 失败。
+    // setExportMode 只释放解码器、保留纹理/surface(不像 _stopBackend 重建纹理会偶发黑屏);
+    // 结束后在 _onAutosyncFinished 重建。iOS 的 setExportMode 为空操作(无此并发限制)。
+    if (backend == PreviewBackend.texture) {
+      try {
+        await _previewApi.setExportMode(true);
+      } catch (_) {/* 忽略 */}
+    }
     try {
       // 同步参数取 ParamsModel 同步组(默认=官方,镜头 sync_settings/同步面板可覆盖)。
       await _bridge.autosyncStart(
@@ -1321,6 +1330,12 @@ class EditController extends ChangeNotifier {
       autosyncRunning = false;
       _autosyncClock.stop();
       status = L.current.ctlAutosyncFailed('$e');
+      // autosync 没起来:把刚释放的预览解码器重建回来,别让画面卡死。
+      if (backend == PreviewBackend.texture) {
+        try {
+          await _previewApi.setExportMode(false);
+        } catch (_) {/* 忽略 */}
+      }
       notifyListeners();
     }
   }
@@ -1396,11 +1411,17 @@ class EditController extends ChangeNotifier {
   }
 
   Future<void> _onAutosyncFinished((double, List<double>, bool) e) async {
-    autosyncRunning = false;
     _autosyncClock.stop();
     debugPrint('[autosync] finished ok=${e.$3} '
         'points=${e.$2.length ~/ 2} median=${e.$1}ms');
     autosyncSyncPoints = e.$2; // 同步点 [mid_ms, off_ms, ...] → 回显到陀螺波形
+    // 重建 autosync 前释放的预览解码器(趁「分析中…」蒙版还盖着,重建不可见再隐藏蒙版)。
+    if (backend == PreviewBackend.texture) {
+      try {
+        await _previewApi.setExportMode(false);
+      } catch (_) {/* 忽略 */}
+    }
+    autosyncRunning = false;
     // 偏移已由 FFI autosync_finish 逐点写入 gyro 并 recompute;这里只需重渲 + 刷 HUD + 波形。
     await _fetchGyroTimeline();
     _refreshPreview();

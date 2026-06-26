@@ -50,7 +50,12 @@ class PreviewApiImpl(
     override fun seekTo(timestampUs: Long) { controller?.seekTo(timestampUs) }
     override fun renderOnce() { controller?.renderOnce() }
     override fun takeCompositedFrameCount(): Long = controller?.takeCompositedFrameCount() ?: 0L
-    override fun setExportMode(on: Boolean) { /* 导出走 startExport;此处不单独用(对齐 iOS) */ }
+    // autosync 借此释放/重建预览解码器(autosync 在 EngineApiImpl,够不到 controller):
+    // on=true 释放预览解码器让出硬件解码器(autosync 自己的解码器才能 start),on=false 重建。
+    // 只动解码器、保留纹理/surface → textureId 不变、不重绑、不黑屏。导出另走 startExport 内的 pauseForExport。
+    override fun setExportMode(on: Boolean) {
+        if (on) controller?.pauseForExport() else controller?.resumeAfterExport()
+    }
 
     /**
      * 导出:复用现成 [GyroflowExporter](解码→去畸变+稳定回读→编码→相册/所选目录)。
