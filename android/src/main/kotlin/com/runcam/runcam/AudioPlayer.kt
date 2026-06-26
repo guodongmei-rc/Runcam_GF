@@ -31,8 +31,7 @@ class AudioPlayer(
 
     @Volatile private var running = false
     @Volatile private var playing = false       // 默认暂停,对齐 VideoDecoder
-    @Volatile private var seekTargetUs = -1L     // >=0 表示有待处理 seek
-    @Volatile private var seekToStart = false    // 视频放到结尾后整体从头
+    @Volatile private var seekTargetUs = -1L     // >=0 表示有待处理 seek(绝对微秒)
 
     fun start() {
         running = true
@@ -49,7 +48,7 @@ class AudioPlayer(
     /** 视频放到结尾时调用:音频也回到开头并暂停,下次 play() 两者同时从 0 起。 */
     fun resetToStart() {
         playing = false
-        seekToStart = true
+        seekToUs(0)
     }
 
     fun stop() { running = false }
@@ -128,7 +127,8 @@ class AudioPlayer(
         var started = false // AudioTrack 是否处于 play() 态
 
         while (running) {
-            // 拖动 seek:与视频同步跳转,清空已缓冲音频避免残留
+            // 待处理 seek(拖动跳转 / 结尾复位走 resetToStart→seekToUs(0) 同一路径):
+            // 与视频同步跳转,清空已缓冲音频避免残留。
             val st = seekTargetUs
             if (st >= 0) {
                 codec.flush()
@@ -137,15 +137,6 @@ class AudioPlayer(
                 track.flush()
                 inputDone = false
                 seekTargetUs = -1
-            }
-            // 从头重播(视频放到结尾后)
-            if (seekToStart) {
-                codec.flush()
-                extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                if (started) { track.pause(); started = false }
-                track.flush()
-                inputDone = false
-                seekToStart = false
             }
             // 暂停:停 AudioTrack,空转保持位置
             if (!playing) {
@@ -178,7 +169,7 @@ class AudioPlayer(
                     ob.position(info.offset)
                     ob.limit(info.offset + info.size)
                     // 非阻塞写 + 回压:缓冲满则短睡重试;随 pause/seek/stop 立即退出,不卡线程。
-                    while (ob.hasRemaining() && running && playing && seekTargetUs < 0 && !seekToStart) {
+                    while (ob.hasRemaining() && running && playing && seekTargetUs < 0) {
                         val w = track.write(ob, ob.remaining(), AudioTrack.WRITE_NON_BLOCKING)
                         if (w < 0) break
                         if (w == 0) {

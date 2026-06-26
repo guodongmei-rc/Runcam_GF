@@ -494,6 +494,22 @@ class _PreviewPageState extends State<PreviewPage>
         ),
       );
 
+  // 进度文字:「X%...」正常字号(14),括号内「(帧/总 @ fps)」小 6 像素(8)。
+  // 自动同步与导出蒙版共用,改样式只此一处。
+  Widget _progressText(String full) {
+    final i = full.indexOf('(');
+    final head = i >= 0 ? full.substring(0, i) : full;
+    final paren = i >= 0 ? full.substring(i) : '';
+    return Text.rich(TextSpan(
+      style: const TextStyle(color: GfColors.text, fontSize: 14),
+      children: [
+        TextSpan(text: head),
+        if (paren.isNotEmpty)
+          TextSpan(text: paren, style: const TextStyle(fontSize: 8)),
+      ],
+    ));
+  }
+
   // 自动同步「分析中…」蒙版(对齐桌面:百分比 + 帧数@fps + 耗时/剩余 + 取消)。
   Widget _autosyncOverlay() {
     final pct = (_c.autosyncProgressValue * 100).toStringAsFixed(2);
@@ -521,22 +537,8 @@ class _PreviewPageState extends State<PreviewPage>
               ),
             ),
             const SizedBox(height: 14),
-            Builder(builder: (_) {
-              // 「分析中 X%...」正常字号(14);括号内「(帧/总 @ fps)」小 6 像素(8),对齐导出蒙版。
-              final full = L.current.prevAnalyzing(
-                  pct, '${_c.autosyncReady}', '${_c.autosyncTotal}', fps);
-              final i = full.indexOf('(');
-              final head = i >= 0 ? full.substring(0, i) : full;
-              final paren = i >= 0 ? full.substring(i) : '';
-              return Text.rich(TextSpan(
-                style: const TextStyle(color: GfColors.text, fontSize: 14),
-                children: [
-                  TextSpan(text: head),
-                  if (paren.isNotEmpty)
-                    TextSpan(text: paren, style: const TextStyle(fontSize: 8)),
-                ],
-              ));
-            }),
+            _progressText(L.current.prevAnalyzing(
+                pct, '${_c.autosyncReady}', '${_c.autosyncTotal}', fps)),
             const SizedBox(height: 6),
             Text(
                 L.current.prevElapsedRemaining(
@@ -581,22 +583,8 @@ class _PreviewPageState extends State<PreviewPage>
               ),
             ),
             const SizedBox(height: 14),
-            Builder(builder: (_) {
-              // 「导出中 X%...」正常字号(14);括号内「(帧/总 @ fps)」小 6 像素(8)。
-              final full = L.current.prevExporting(
-                  pct, '${_c.exportFrame}', '${_c.exportTotal}', fps);
-              final i = full.indexOf('(');
-              final head = i >= 0 ? full.substring(0, i) : full;
-              final paren = i >= 0 ? full.substring(i) : '';
-              return Text.rich(TextSpan(
-                style: const TextStyle(color: GfColors.text, fontSize: 14),
-                children: [
-                  TextSpan(text: head),
-                  if (paren.isNotEmpty)
-                    TextSpan(text: paren, style: const TextStyle(fontSize: 8)),
-                ],
-              ));
-            }),
+            _progressText(L.current.prevExporting(
+                pct, '${_c.exportFrame}', '${_c.exportTotal}', fps)),
             const SizedBox(height: 6),
             Text(
                 L.current.prevElapsedRemaining(
