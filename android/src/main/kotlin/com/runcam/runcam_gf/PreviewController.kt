@@ -3,6 +3,7 @@ package com.runcam.runcam_gf
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.runcam.runcam.AudioPlayer
 import com.runcam.runcam.GyroflowNative
 import com.runcam.runcam.VideoDecoder
 import io.flutter.view.TextureRegistry
@@ -33,6 +34,7 @@ class PreviewController(
 
     private var producer: TextureRegistry.SurfaceProducer? = null
     private var decoder: VideoDecoder? = null
+    private var audio: AudioPlayer? = null
     private var uri: Uri? = null
     private var outW = 0
     private var outH = 0
@@ -77,7 +79,13 @@ class PreviewController(
             }
         }
         decoder = d
+        // 音频随视频并行播放(对齐 iOS MDK 自带音频);视频放到结尾时把音频也复位到开头并暂停,
+        // 下次 play() 两者同时从 0 起。无音轨视频 AudioPlayer 自动为 no-op。
+        val a = AudioPlayer(context, uri!!)
+        audio = a
+        d.onEnd = { a.resetToStart() }
         d.start() // 起解码线程,默认暂停 → 渲首帧后停住(VideoDecoder firstShown 分支)
+        a.start() // 起音频线程,默认暂停,随 play/pause/seek 同步
 
         return Triple(p.id(), outW, outH)
     }
@@ -91,11 +99,11 @@ class PreviewController(
         Log.d(TAG, "bindSurface ${outW}x$outH -> $r")
     }
 
-    fun play() { decoder?.play() }
+    fun play() { decoder?.play(); audio?.play() }
 
-    fun pause() { decoder?.pause() }
+    fun pause() { decoder?.pause(); audio?.pause() }
 
-    fun seekTo(timestampUs: Long) { decoder?.seekToUs(timestampUs) }
+    fun seekTo(timestampUs: Long) { decoder?.seekToUs(timestampUs); audio?.seekToUs(timestampUs) }
 
     /** 暂停态参数 recompute 后重渲当前帧(播放时循环已连续刷新,无需调用)。 */
     fun renderOnce() { decoder?.rerender() }
@@ -110,6 +118,7 @@ class PreviewController(
     fun pauseForExport() {
         exporting = true
         decoder?.pause()
+        audio?.pause() // 导出期间静音预览音频(导出自带音频处理)
     }
 
     /** 导出结束:恢复预览喂帧(输出尺寸的恢复由 Dart 侧负责)。 */
@@ -122,6 +131,8 @@ class PreviewController(
         tornDown = true
         decoder?.stop()
         decoder = null
+        audio?.stop()
+        audio = null
         GyroflowNative.nativePreviewSurfaceDestroyed()
         producer?.release()
         producer = null
