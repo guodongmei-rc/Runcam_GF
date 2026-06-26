@@ -182,18 +182,20 @@ class GyroflowExporter(
         decoder.configure(vFormat, null, null, 0)
         decoder.start()
 
-        // 音频透传(可选): 独立 extractor, 压缩样本直接复制, 不重编码
+        // 音频(可选): 仅当源是 MP4 可直接封装的 AAC 才透传; 其它(含 Sony RX100VII 的 audio/raw
+        // PCM —— MP4 不支持, 原样 addTrack 会 "Unsupported mime 'audio/raw'" → 整个导出失败)跳过音频
+        // → 导出成功但无声, 绝不失败/卡死。(PCM→AAC 转码后续单独做, 需真机迭代验证。)
         var aExtractor: MediaExtractor? = null
         var aFormat: MediaFormat? = null
         if (s.exportAudio) {
             val ae = MediaExtractor()
             ae.setDataSource(context, source, null)
             val aIdx = firstTrack(ae, "audio/")
-            if (aIdx != null) {
-                ae.selectTrack(aIdx)
-                aFormat = ae.getTrackFormat(aIdx)
-                aExtractor = ae
+            val fmt = aIdx?.let { ae.selectTrack(it); ae.getTrackFormat(it) }
+            if (fmt != null && fmt.getString(MediaFormat.KEY_MIME) == MediaFormat.MIMETYPE_AUDIO_AAC) {
+                aFormat = fmt; aExtractor = ae
             } else {
+                Log.w(TAG, "音频 ${fmt?.getString(MediaFormat.KEY_MIME)} 非 AAC(MP4 不支持), 跳过音频导出")
                 ae.release()
             }
         }
@@ -357,7 +359,7 @@ class GyroflowExporter(
         }
         producerError.get()?.let { throw it }
 
-        // 音频透传: 把源音频压缩样本复制进 muxer
+        // 音频透传(仅 AAC 源): 把源压缩样本复制进 muxer。
         if (aExtractor != null && audioTrack >= 0 && muxerStarted) {
             copyAudio(aExtractor, muxer, audioTrack, effStart, effEnd)
         }

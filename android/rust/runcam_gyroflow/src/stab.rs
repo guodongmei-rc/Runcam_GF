@@ -1871,8 +1871,15 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeRenderFrameI4
         let t0 = Instant::now();
         let tr = get_transform(timestamp_us);
         let t1 = Instant::now();
-        if let Some((kp, matrices, mesh, dm, drawing)) = tr {
-            let _ = crate::preview::process_frame_gpu(&yd, &ud, &vd, &kp, &matrices, &mesh, &drawing, &dm);
+        if let Some((mut kp, matrices, _mesh, dm, drawing)) = tr {
+            // [关键提速] 导出同样跳过逐像素镜头网格样条(interpolate_mesh)。带"畸变网格"的镜头档案
+            // (如此 Sony 视频)每个输出像素要做 GRID_SIZE=9 的二元三次样条求解; 导出跑在用户选的全
+            // 分辨率(最高 8K)→ 逐像素全跑 = 导出超级慢的唯一来源。预览已清 512 + 传空 mesh, 这里对齐:
+            // 清 512 标志 + 传空 mesh → 着色器跳过它 → 导出贴到 GPU 吞吐而非每像素样条。代价: 镜头畸变
+            // 校正略降精度(仅丢网格的细微修正, 解析模型仍保留), 与预览观感一致。
+            kp.flags &= !512;
+            let empty_mesh: Vec<f32> = Vec::new();
+            let _ = crate::preview::process_frame_gpu(&yd, &ud, &vd, &kp, &matrices, &empty_mesh, &drawing, &dm);
         }
         let t2 = Instant::now();
         // 流水线回读:返回的是**上一帧**的 I420(首帧为空);收尾用 nativeRenderFlushI420 取最后一帧。

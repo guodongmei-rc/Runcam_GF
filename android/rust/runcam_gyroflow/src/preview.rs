@@ -297,6 +297,10 @@ struct PreviewState {
     readback_slots: [Option<(wgpu::Buffer, wgpu::Buffer)>; 2],
     readback_cur: usize,            // 下一个写入的槽
     readback_pending: Option<usize>, // 待读的上一帧所在槽
+    // 每个槽对应"拷贝提交"的 SubmissionIndex。回读时只等这个特定提交完成(上一帧的拷贝,
+    // 早已就绪)而非 wait_indefinitely(会傻等当帧刚提交的去畸变 ~22ms)。
+    // 这样当帧 GPU 去畸变在后台跑、和回读/编码重叠 → producer 节奏贴到 GPU 吞吐而非串行相加。
+    readback_idx: [Option<wgpu::SubmissionIndex>; 2],
 }
 // 预览调用均来自 Activity 的回调(单线程)。NativeWindow 非 Send,这里手动声明。
 unsafe impl Send for PreviewState {}
@@ -356,6 +360,7 @@ fn setup(window: ndk::native_window::NativeWindow, width: u32, height: u32) -> R
         undistort: None, in_tex: None, out_tex: None,
         yuv_conv: None, y_tex: None, uv_tex: None,
         readback_slots: [None, None], readback_cur: 0, readback_pending: None,
+        readback_idx: [None, None],
     })
 }
 
@@ -695,7 +700,13 @@ fn readback_drain_slot(state: &PreviewState, slot: usize,
     let s = state.readback_slots[slot].as_ref()?;
     s.0.slice(..).map_async(wgpu::MapMode::Read, |_| {});
     s.1.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    let _ = state.device.poll(wgpu::PollType::wait_indefinitely());
+    // 只等"这个槽的拷贝提交"完成(上一帧的拷贝,早已就绪),不等当帧刚提交的去畸变。
+    // 这样当帧 GPU 去畸变在后台跑、与回读/编码重叠 → 导出耗时贴到吞吐而非串行相加(实测 ~42ms→~18ms)。
+    // submission_index=None 时退化为 wait_indefinitely(首帧/异常兜底)。
+    let _ = state.device.poll(wgpu::PollType::Wait {
+        submission_index: state.readback_idx[slot].clone(),
+        timeout: None,
+    });
     let ydata = s.0.slice(..).get_mapped_range();
     let uvdata = s.1.slice(..).get_mapped_range();
     let out = assemble_i420(&ydata, &uvdata, tw, th, cw, ch, y_pad, uv_pad);
@@ -732,7 +743,7 @@ pub(crate) fn readback_pipelined() -> Option<(u32, u32, Vec<u8>)> {
 
     // 2) 提交本帧 yuv 转换 + 拷贝到当前槽(不等)。
     let cur = state.readback_cur;
-    {
+    let submit_idx = {
         let conv = state.yuv_conv.as_ref().unwrap();
         let out_view = state.out_tex.as_ref().unwrap().2.create_view(&wgpu::TextureViewDescriptor::default());
         let y_view = state.y_tex.as_ref().unwrap().2.create_view(&wgpu::TextureViewDescriptor::default());
@@ -772,8 +783,9 @@ pub(crate) fn readback_pipelined() -> Option<(u32, u32, Vec<u8>)> {
             wgpu::TexelCopyBufferInfo { buffer: uv_buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(uv_pad), rows_per_image: Some(ch) } },
             wgpu::Extent3d { width: cw, height: ch, depth_or_array_layers: 1 },
         );
-        state.queue.submit(Some(enc.finish()));
-    }
+        state.queue.submit(Some(enc.finish()))
+    };
+    state.readback_idx[cur] = Some(submit_idx);
     state.readback_pending = Some(cur);
     state.readback_cur = 1 - cur;
     result

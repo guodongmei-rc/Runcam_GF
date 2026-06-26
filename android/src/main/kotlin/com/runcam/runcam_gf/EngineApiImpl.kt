@@ -127,6 +127,8 @@ class EngineApiImpl(
         var audioSampleRate: Long? = null
         var rotationDeg: Long? = null
         var videoBitrate: Long? = null
+        var videoTrackIdx = -1          // 视频轨索引(供「实测纯视频码率」回退用)
+        var videoDurationUs = -1L       // 视频轨时长(us)
         val extractor = MediaExtractor()
         try {
             if (uriOrPath.startsWith("content://") || uriOrPath.startsWith("file://")) {
@@ -140,6 +142,10 @@ class EngineApiImpl(
                 when {
                     mime.startsWith("video/") && videoCodec == null -> {
                         videoCodec = mapVideoCodec(mime)
+                        videoTrackIdx = i
+                        videoDurationUs = runCatching {
+                            if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else -1L
+                        }.getOrNull() ?: -1L
                         // 有视频轨即给出旋转角:无 KEY_ROTATION 时取 0(对齐 iOS 显示「0°」而非「---」)。
                         rotationDeg = runCatching {
                             if (fmt.containsKey(MediaFormat.KEY_ROTATION)) fmt.getInteger(MediaFormat.KEY_ROTATION).toLong() else 0L
@@ -157,13 +163,29 @@ class EngineApiImpl(
                     }
                 }
             }
+            // 对齐 iOS:iOS 用 AVAssetTrack.estimatedDataRate(纯视频轨实测平均码率)。
+            // 视频轨无 KEY_BIT_RATE 时,这里走「视频轨样本字节总和 ÷ 时长」实测纯视频码率,
+            // 而非整文件码率——后者含音频(Sony RX100VII 为 LPCM,码率很高)与封装开销,会把
+            // 默认导出比特率顶高(实测 Android 102 vs iOS 98 即此因)。只读样本大小、不读样本数据。
+            if (videoBitrate == null && videoTrackIdx >= 0 && videoDurationUs > 0) {
+                videoBitrate = runCatching {
+                    extractor.selectTrack(videoTrackIdx)
+                    var total = 0L
+                    while (true) {
+                        val sz = extractor.getSampleSize()
+                        if (sz < 0) break
+                        total += sz
+                        if (!extractor.advance()) break
+                    }
+                    if (total > 0) total * 8L * 1_000_000L / videoDurationUs else null
+                }.getOrNull()
+            }
         } catch (e: Throwable) {
             Log.w(TAG, "readAvInfo failed: ${e.message}")
         } finally {
             runCatching { extractor.release() }
         }
-        // MediaExtractor 轨道格式很多视频不带 KEY_BIT_RATE → 用 MediaMetadataRetriever 兜底
-        // (METADATA_KEY_BITRATE 是整体码率,近似视频码率;对齐官方默认导出比特率 = 码率/1024/1024)。
+        // 兜底:连样本遍历都失败(无时长等)才退回整文件码率(含音频,与 iOS 不完全一致)。
         if (videoBitrate == null) {
             videoBitrate = runCatching {
                 val mmr = android.media.MediaMetadataRetriever()
