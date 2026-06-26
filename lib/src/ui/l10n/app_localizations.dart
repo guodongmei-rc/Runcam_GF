@@ -1060,7 +1060,7 @@ abstract class AppLocalizations {
   /// No description provided for @ctlMotionWrongType.
   ///
   /// In en, this message translates to:
-  /// **'Please select a .gcsv motion file'**
+  /// **'Please select a motion file (.gcsv/.bbl/.bfl/.csv)'**
   String get ctlMotionWrongType;
 
   /// No description provided for @inputVideoInfo.
