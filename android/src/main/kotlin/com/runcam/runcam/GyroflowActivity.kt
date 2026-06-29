@@ -1,5 +1,6 @@
 package com.runcam.runcam
 
+import com.runcam.runcam_gf.R
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color

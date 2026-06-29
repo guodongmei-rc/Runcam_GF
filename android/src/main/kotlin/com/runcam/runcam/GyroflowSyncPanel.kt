@@ -1,5 +1,6 @@
 package com.runcam.runcam
 
+import com.runcam.runcam_gf.R
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
