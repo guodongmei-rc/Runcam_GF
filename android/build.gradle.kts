@@ -30,7 +30,7 @@ android {
     // namespace 设为 com.runcam.runcam: 让搬来的 Gyroflow 代码里的 `R`(R.drawable.ic_gf_*)
     // 解析到本库生成的 com.runcam.runcam.R,不用改动拷来的源文件。
     // 插件入口 RuncamGfPlugin 仍在 com.runcam.runcam_gf 包(pubspec 注册用)。
-    namespace = "com.runcam.runcam_gf"
+    namespace = "com.runcam.runcam"
 
     compileSdk = 36
 
