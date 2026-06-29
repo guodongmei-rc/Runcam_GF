@@ -10,6 +10,8 @@ import com.runcam.runcam.GyroflowNative
 import com.runcam.runcam.VideoDecoder
 import io.flutter.view.TextureRegistry
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -44,6 +46,11 @@ class PreviewController(
     @Volatile private var tornDown = false
     @Volatile private var exporting = false // 导出期间停止预览喂帧(避免与导出并发动单例引擎)
     private val produceCount = AtomicInteger(0) // 已喂帧数(合成 FPS 的近似代理)
+    // 首帧画出栅栏:setup() 起的解码线程是异步的,首帧渲染需要时间。打开视频后若立即跑
+    // autosync(raw-IMU+有镜头档案),其 setExportMode(true)→pauseForExport 会在首帧画出前
+    // 就杀掉预览解码器 → autosync 整段预览黑屏(对齐用户「加载到视频要先显示第一帧」)。
+    // 故 pauseForExport 释放解码器前先等此栅栏:首帧已画(或导出场景早已画过)即立刻放行。
+    private val firstFrameLatch = CountDownLatch(1)
 
     /** 创建预览纹理:建 SurfaceProducer + 绑 wgpu + 起解码器(默认暂停)。返回 [textureId, outW, outH]。 */
     fun setup(uriOrPath: String): Triple<Long, Int, Int> {
@@ -83,6 +90,7 @@ class PreviewController(
             val res = GyroflowNative.nativeProcessFrame(frame.y, frame.u, frame.v, frame.width, frame.height, ptsUs)
             if (res != null && res.startsWith("frame FAIL")) Log.e(TAG, res)
             produceCount.incrementAndGet()
+            firstFrameLatch.countDown() // 标记首帧已渲进 surface(放行 pauseForExport 的等待)
         }
     }
 
@@ -142,6 +150,10 @@ class PreviewController(
      * 重活再起一个同分辨率解码器时 MediaCodec.start() 会失败。surface/wgpu 绑定保留,不重建纹理。
      */
     fun pauseForExport() {
+        // 先等首帧画出再释放解码器:autosync 紧随 setup() 触发时,避免在首帧渲染前杀掉解码器
+        // 导致整段预览黑屏。导出场景首帧早已画过,栅栏已放行 → 立即返回,不引入额外延迟。
+        // 有界等待(超时即继续,行为退回原状,不卡死);此路径本就阻塞(decoder.stop join 800ms)。
+        runCatching { firstFrameLatch.await(700, TimeUnit.MILLISECONDS) }
         exporting = true
         decoder?.stop()
         decoder = null

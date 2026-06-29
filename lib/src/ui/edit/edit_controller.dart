@@ -694,6 +694,12 @@ class EditController extends ChangeNotifier {
       aspect = oh > 0 ? ow / oh : 16 / 9;
       playing = false; // 打开后停在首帧,等用户手动点播放
       await _startBackend();
+      // 华为等机型硬解 ByteBuffer 路 start 失败 → 异步降级到 GPU 解码路(GlVideoDecoder),
+      // 首帧产出明显更慢。在「加载中」蒙版仍盖着时等首帧真正渲进预览 surface,避免:
+      //   ① 蒙版消失后黑屏一瞬再显首帧;② 紧随的 autosync 在首帧画出前释放解码器(整段「分析中」黑屏)。
+      // 仅安卓:iOS 无降级路、autosync 不释放解码器,且其 takeCompositedFrameCount 计数依赖
+      // widget 合成(加载期纹理尚未上屏)不能复用此信号。
+      await _awaitFirstFrameRendered();
       _playheadUs = 0;
       _maybeRunPreviewClock();
       await _fetchPreviewStateOnce(); // 方向指示器:载入即回显起始姿态(不等播放)
@@ -1578,6 +1584,22 @@ class EditController extends ChangeNotifier {
       }
     }
     // PlatformView 后端:UiKitView 在页面构建时创建,原生 init 渲首帧并暂停(由 togglePlay 经通道控制播放)。
+  }
+
+  /// 等首帧真正渲进预览(仅安卓 Texture 后端)。安卓 takeCompositedFrameCount() 返回的是
+  /// 「已喂引擎/渲进 surface 的帧数」(produceCount,与 widget 是否合成无关),>0 即首帧已画。
+  /// 异步轮询、不阻塞原生主线程,故可给足超时覆盖华为降级 GPU 解码路的慢首帧;超时即继续
+  /// (退回原行为,不卡死)。iOS 跳过(无降级路 + 该计数依赖 widget 合成,加载期恒 0)。
+  Future<void> _awaitFirstFrameRendered({int timeoutMs = 3000}) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (backend != PreviewBackend.texture) return;
+    final sw = Stopwatch()..start();
+    while (sw.elapsedMilliseconds < timeoutMs) {
+      try {
+        if (await _previewApi.takeCompositedFrameCount() > 0) return;
+      } catch (_) {/* 查询失败:继续轮询直到超时 */}
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
   }
 
   Future<void> _stopBackend() async {
