@@ -135,6 +135,12 @@ abstract class EngineApi {
   void setOutputSize(int width, int height); // 当长宽比 scale 铺满
   void setOutputSizeExact(int width, int height); // 精确像素,可低于 input(预览降采样)
 
+  /// 查询本机该编码格式硬件编码器的最大可导出分辨率 [maxW, maxH]。
+  /// 导出面板据此「按当前机型 + 编码格式」过滤输出大小预设(看得到的尺寸就一定能导出:
+  /// 三星支持 8K 就显示到 8K,华为只到 4K 就只显示到 4K)。codecIndex: 0=H.264 1=HEVC。
+  /// 仅只读查询能力,不创建编码器、不影响引擎/导出。查不到→返回编码标准规格上限兜底。
+  List<int> encoderMaxSize(int codecIndex);
+
   // ---- IMU / 运动数据 ----
   void setGyroOffset(double offsetMs);
   void setImuLpf(double hz);

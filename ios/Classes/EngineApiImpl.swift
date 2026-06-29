@@ -358,6 +358,12 @@ final class EngineApiImpl: EngineApi {
         _ = gyroflow_set_output_size_exact(h, UInt32(truncatingIfNeeded: width), UInt32(truncatingIfNeeded: height))
     }
 
+    // 该编码格式最大可导出分辨率 [maxW, maxH]。iOS 走 AVAssetWriter,按编码标准规格上限返回
+    // (H.264 4096²、HEVC 8192²),保持现状不变;设备级精确探测(VideoToolbox)留后续。
+    func encoderMaxSize(codecIndex: Int64) throws -> [Int64] {
+        return codecIndex == 0 ? [4096, 4096] : [8192, 8192]
+    }
+
     // MARK: - IMU / 运动数据
 
     func setGyroOffset(offsetMs: Double) throws {

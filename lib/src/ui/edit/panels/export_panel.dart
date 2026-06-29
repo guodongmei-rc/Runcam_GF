@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:runcam_gf/src/bridge/engine_api.g.dart' show EngineApi;
 import 'package:runcam_gf/src/state/params_model.dart'; // ParamsModelAdvanced 扩展(导出组)
 import '../edit_controller.dart';
 import '../gyro_widgets.dart';
@@ -40,6 +41,12 @@ class _ExportPanelState extends State<ExportPanel> {
     (name: 'H.265/HEVC', gpu: true, audio: true, bitrate: true, maxW: 8192, maxH: 8192, ext: '.mp4'),
   ];
 
+  // 本机各编码格式硬件编码器最大可导出分辨率 [maxW,maxH](按当前机型)。key=codecIndex。
+  // 经原生只读查询(EngineApi.encoderMaxSize)得到 → 据此过滤「输出大小」预设:三星支持 8K 就
+  // 显示到 8K,华为只到 4K 就只显示到 4K。某 codec 未查到 → 该 codec 回退编码规格上限(_codecs.maxW/H)。
+  final EngineApi _capsApi = EngineApi();
+  final Map<int, ({int maxW, int maxH})> _encoderMax = {};
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +58,32 @@ class _ExportPanelState extends State<ExportPanel> {
     _nf.addListener(() {
       if (!_nf.hasFocus) c.setExportFileName(_name.text);
     });
+    _loadEncoderCaps();
+  }
+
+  // 启动时查一次两种编码格式的本机硬件上限并缓存(查询不依赖是否已打开视频)。
+  Future<void> _loadEncoderCaps() async {
+    for (var ci = 0; ci < _codecs.length; ci++) {
+      try {
+        final r = await _capsApi.encoderMaxSize(ci);
+        if (r.length >= 2 && r[0] > 0 && r[1] > 0) {
+          _encoderMax[ci] = (maxW: r[0], maxH: r[1]);
+        }
+      } catch (_) {/* 查询失败 → 该 codec 走规格上限兜底 */}
+    }
+    if (mounted) setState(() {});
+  }
+
+  // 该分辨率「本机 + 当前编码格式」是否可导出(决定预设是否显示)。未查到→按编码规格上限兜底。
+  // 方向无关:编码器报告的 max 可能仅覆盖横向,竖向(9:16)按宽高交换再比一次。
+  bool _sizeSupported(int w, int h) {
+    final ci = m.exportCodecIndex.clamp(0, _codecs.length - 1);
+    final mx = _encoderMax[ci];
+    if (mx == null) {
+      final cc = _codecs[ci];
+      return w <= cc.maxW && h <= cc.maxH;
+    }
+    return (w <= mx.maxW && h <= mx.maxH) || (w <= mx.maxH && h <= mx.maxW);
   }
 
   @override
@@ -135,7 +168,8 @@ class _ExportPanelState extends State<ExportPanel> {
     for (final p in g.fixed) {
       list.add((label: p.label, w: p.w, h: p.h));
     }
-    return list;
+    // 按「本机 + 当前编码格式」硬件能力过滤:超出本机编码上限的档(如 4K 机型上的 8K/6K)不显示。
+    return list.where((s) => _sizeSupported(s.w, s.h)).toList();
   }
 
   // 当前视频输出比例对应的分组下标(默认 16:9)。

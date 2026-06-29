@@ -294,6 +294,13 @@ interface EngineApi {
   fun setPreviewResolution(targetHeight: Long)
   fun setOutputSize(width: Long, height: Long)
   fun setOutputSizeExact(width: Long, height: Long)
+  /**
+   * 查询本机该编码格式硬件编码器的最大可导出分辨率 [maxW, maxH]。
+   * 导出面板据此「按当前机型 + 编码格式」过滤输出大小预设(看得到的尺寸就一定能导出:
+   * 三星支持 8K 就显示到 8K,华为只到 4K 就只显示到 4K)。codecIndex: 0=H.264 1=HEVC。
+   * 仅只读查询能力,不创建编码器、不影响引擎/导出。查不到→返回编码标准规格上限兜底。
+   */
+  fun encoderMaxSize(codecIndex: Long): List<Long>
   fun setGyroOffset(offsetMs: Double)
   fun setImuLpf(hz: Double)
   fun setImuMedian(samples: Long)
@@ -784,6 +791,23 @@ interface EngineApi {
             val wrapped: List<Any?> = try {
               api.setOutputSizeExact(widthArg, heightArg)
               listOf(null)
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.encoderMaxSize$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val codecIndexArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              listOf(api.encoderMaxSize(codecIndexArg))
             } catch (exception: Throwable) {
               wrapError(exception)
             }

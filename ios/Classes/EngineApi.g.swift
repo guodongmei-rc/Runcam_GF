@@ -340,6 +340,11 @@ protocol EngineApi {
   func setPreviewResolution(targetHeight: Int64) throws
   func setOutputSize(width: Int64, height: Int64) throws
   func setOutputSizeExact(width: Int64, height: Int64) throws
+  /// 查询本机该编码格式硬件编码器的最大可导出分辨率 [maxW, maxH]。
+  /// 导出面板据此「按当前机型 + 编码格式」过滤输出大小预设(看得到的尺寸就一定能导出:
+  /// 三星支持 8K 就显示到 8K,华为只到 4K 就只显示到 4K)。codecIndex: 0=H.264 1=HEVC。
+  /// 仅只读查询能力,不创建编码器、不影响引擎/导出。查不到→返回编码标准规格上限兜底。
+  func encoderMaxSize(codecIndex: Int64) throws -> [Int64]
   func setGyroOffset(offsetMs: Double) throws
   func setImuLpf(hz: Double) throws
   func setImuMedian(samples: Int64) throws
@@ -760,6 +765,25 @@ class EngineApiSetup {
       }
     } else {
       setOutputSizeExactChannel.setMessageHandler(nil)
+    }
+    /// 查询本机该编码格式硬件编码器的最大可导出分辨率 [maxW, maxH]。
+    /// 导出面板据此「按当前机型 + 编码格式」过滤输出大小预设(看得到的尺寸就一定能导出:
+    /// 三星支持 8K 就显示到 8K,华为只到 4K 就只显示到 4K)。codecIndex: 0=H.264 1=HEVC。
+    /// 仅只读查询能力,不创建编码器、不影响引擎/导出。查不到→返回编码标准规格上限兜底。
+    let encoderMaxSizeChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.encoderMaxSize\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      encoderMaxSizeChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let codecIndexArg = args[0] as! Int64
+        do {
+          let result = try api.encoderMaxSize(codecIndex: codecIndexArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      encoderMaxSizeChannel.setMessageHandler(nil)
     }
     let setGyroOffsetChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.setGyroOffset\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

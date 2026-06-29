@@ -272,6 +272,29 @@ class EngineApiImpl(
     override fun setOutputSize(width: Long, height: Long) { GyroflowNative.nativeSetOutputSize(width.toInt(), height.toInt()) }
     override fun setOutputSizeExact(width: Long, height: Long) { GyroflowNative.nativeSetOutputSizeExact(width.toInt(), height.toInt()) }
 
+    // 本机该编码格式硬件编码器最大可导出分辨率 [maxW, maxH]。只读查编解码器清单(不实例化编码器,
+    // 避免预览占用编解码资源时查询失败),优先取硬件编码器。查不到→规格上限兜底(H.264 4096²/HEVC 8192²)。
+    // 供 Dart 导出面板「按当前机型 + 编码格式」过滤输出大小预设。不碰引擎/导出逻辑。
+    override fun encoderMaxSize(codecIndex: Long): List<Long> {
+        val mime = if (codecIndex == 0L) android.media.MediaFormat.MIMETYPE_VIDEO_AVC
+                   else android.media.MediaFormat.MIMETYPE_VIDEO_HEVC
+        val fallback = if (codecIndex == 0L) listOf(4096L, 4096L) else listOf(8192L, 8192L)
+        return try {
+            val infos = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+            fun pick(hwOnly: Boolean): android.media.MediaCodecInfo.VideoCapabilities? {
+                for (info in infos) {
+                    if (!info.isEncoder) continue
+                    if (android.os.Build.VERSION.SDK_INT >= 29 && hwOnly && !info.isHardwareAccelerated) continue
+                    if (info.supportedTypes.none { it.equals(mime, ignoreCase = true) }) continue
+                    return info.getCapabilitiesForType(mime).videoCapabilities
+                }
+                return null
+            }
+            val vc = pick(hwOnly = true) ?: pick(hwOnly = false) ?: return fallback
+            listOf(vc.supportedWidths.upper.toLong(), vc.supportedHeights.upper.toLong())
+        } catch (_: Throwable) { fallback }
+    }
+
     // MARK: - IMU / 运动数据
 
     override fun setGyroOffset(offsetMs: Double) { GyroflowNative.nativeSetGyroOffset(offsetMs) }

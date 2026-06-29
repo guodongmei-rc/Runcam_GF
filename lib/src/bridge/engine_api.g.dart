@@ -833,6 +833,37 @@ class EngineApi {
     }
   }
 
+  /// 查询本机该编码格式硬件编码器的最大可导出分辨率 [maxW, maxH]。
+  /// 导出面板据此「按当前机型 + 编码格式」过滤输出大小预设(看得到的尺寸就一定能导出:
+  /// 三星支持 8K 就显示到 8K,华为只到 4K 就只显示到 4K)。codecIndex: 0=H.264 1=HEVC。
+  /// 仅只读查询能力,不创建编码器、不影响引擎/导出。查不到→返回编码标准规格上限兜底。
+  Future<List<int>> encoderMaxSize(int codecIndex) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.encoderMaxSize$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[codecIndex]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<int>();
+    }
+  }
+
   Future<void> setGyroOffset(double offsetMs) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.setGyroOffset$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
