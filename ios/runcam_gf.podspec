@@ -1,8 +1,8 @@
 #
 # RuncamGF — Flutter 插件 podspec。
-# 由原 App 的本地 Pod「Gyroflow」(ios/Gyroflow/Gyroflow.podspec)原样合并而来:
 # 封装 libgyroflow_core.a + OpenCV + flatbuffers 静态库、MDK 播放器 xcframework,
-# 以及 iOS 端参数面板/同步/导出 Obj-C/Obj-C++ 源码 + Flutter 插件入口(Swift)。
+# 以及 iOS 端预览/同步/导出 Obj-C/Obj-C++ 薄壳 + Flutter 插件入口(Swift)。
+# 编辑器 UI 已迁到共享 Dart 层,原生只保留必须项(解码/预览/导出/选择器)。
 # 仅支持 arm64 真机。
 #
 Pod::Spec.new do |s|
@@ -11,8 +11,8 @@ Pod::Spec.new do |s|
   s.summary          = 'RuncamGF — Gyroflow 视频防抖 Flutter 插件(iOS 原生集成)。'
   s.description      = <<-DESC
     封装 Gyroflow core 静态库(libgyroflow_core.a + OpenCV + flatbuffers)、
-    MDK 播放器 xcframework,以及 iOS 端的参数面板/同步/导出 Obj-C/Obj-C++ 源码。
-    Flutter 通过 channel `com.runcam/gyroflow` 的 `open` 拉起原生全屏防抖页。
+    MDK 播放器 xcframework,以及 iOS 端的预览/同步/导出 Obj-C/Obj-C++ 薄壳。
+    编辑器 UI 在共享 Dart 层,原生经 Pigeon(EngineApi/PreviewApi)转发。
     仅支持 arm64 真机。
   DESC
   s.homepage         = 'https://gyroflow.xyz'
@@ -33,7 +33,7 @@ Pod::Spec.new do |s|
   # + Gyroflow Obj-C/Obj-C++ 源码 + FFI 头。
   s.source_files     = 'Classes/**/*.{swift,h,mm}', 'Sources/**/*.{h,m,mm}', 'Libs/gyroflow_ffi.h'
   # PreviewController.h 进 public(umbrella)header,Swift 才能 import 到 PreviewController。
-  s.public_header_files = 'Libs/gyroflow_ffi.h', 'Sources/GyroflowLauncher.h', 'Sources/AutosyncRunner.h', 'Classes/PreviewController.h', 'Classes/PreviewPlatformView.h', 'Classes/GFExporter.h', 'Sources/GFExportUtils.h'
+  s.public_header_files = 'Libs/gyroflow_ffi.h', 'Sources/AutosyncRunner.h', 'Classes/PreviewController.h', 'Classes/PreviewPlatformView.h', 'Classes/GFExporter.h', 'Sources/GFExportUtils.h'
   s.preserve_paths   = 'Libs/*.a', 'MDK/include/**/*'
 
   s.vendored_libraries = [

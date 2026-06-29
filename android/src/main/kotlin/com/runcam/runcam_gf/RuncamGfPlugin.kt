@@ -7,13 +7,11 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
-import com.runcam.runcam.GyroflowActivity
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
 import org.json.JSONObject
@@ -22,7 +20,6 @@ import org.json.JSONObject
  * RuncamGF Flutter 插件 — Android 入口。
  *
  * Channel:
- *   - `com.runcam/gyroflow`:`open` → startActivity 拉起 [GyroflowActivity](原生全屏防抖页)。
  *   - `runcam_gf_example/picker`:编辑器(PreviewPage/EditController)用的文件选择器。
  *     用 ACTION_OPEN_DOCUMENT / OPEN_DOCUMENT_TREE 选文件/目录并取持久读权限,返回 content:// 串
  *     (gyroflow 核心 nativeOpenVideo 只接受该形式,缓存路径会被判 Invalid path)。原先放在
@@ -33,11 +30,9 @@ import org.json.JSONObject
  */
 class RuncamGfPlugin :
     FlutterPlugin,
-    MethodCallHandler,
     ActivityAware,
     PluginRegistry.ActivityResultListener {
 
-    private lateinit var channel: MethodChannel
     private lateinit var pickerChannel: MethodChannel
     private var appContext: Context? = null
     private var activity: Activity? = null
@@ -53,8 +48,6 @@ class RuncamGfPlugin :
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
-        channel = MethodChannel(binding.binaryMessenger, "com.runcam/gyroflow")
-        channel.setMethodCallHandler(this)
 
         // 文件选择器通道(供编辑器选视频/镜头/陀螺/授权目录)。
         pickerChannel = MethodChannel(binding.binaryMessenger, "runcam_gf_example/picker")
@@ -72,21 +65,6 @@ class RuncamGfPlugin :
         val preview = PreviewApiImpl(binding.applicationContext, binding.textureRegistry, events)
         PreviewApi.setUp(binding.binaryMessenger, preview)
         previewApi = preview
-    }
-
-    override fun onMethodCall(call: MethodCall, result: Result) {
-        when (call.method) {
-            "open" -> {
-                val act = activity
-                if (act == null) {
-                    result.error("NO_ACTIVITY", "插件未附着到 Activity", null)
-                    return
-                }
-                act.startActivity(Intent(act, GyroflowActivity::class.java))
-                result.success(null)
-            }
-            else -> result.notImplemented()
-        }
     }
 
     // —— 文件选择器:对齐安卓 SAF,返回 content:// 字符串 ——
@@ -129,7 +107,7 @@ class RuncamGfPlugin :
                 }
                 pickerPending = result
                 // 导出目录需写权限:createDocument/openFileDescriptor("rw") 写视频文件,
-                // 仅读会在重启后(持久授权只剩读)导出失败。对齐 GyroflowActivity 的读+写授权。
+                // 仅读会在重启后(持久授权只剩读)导出失败,故请求读+写持久授权。
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                     addFlags(
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -237,7 +215,6 @@ class RuncamGfPlugin :
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        channel.setMethodCallHandler(null)
         pickerChannel.setMethodCallHandler(null)
         EngineApi.setUp(binding.binaryMessenger, null)
         PreviewApi.setUp(binding.binaryMessenger, null)

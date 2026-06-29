@@ -1,11 +1,2 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 原样从原 App 抽离: Gyroflow 防抖原生全屏页。Flutter 通过 channel
-         com.runcam/gyroflow 的 open 用 startActivity 拉起。 -->
-    <application>
-        <activity
-            android:name="com.runcam.runcam.GyroflowActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
-    </application>
 </manifest>

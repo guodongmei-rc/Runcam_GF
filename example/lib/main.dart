@@ -103,18 +103,6 @@ class _HomePageState extends State<HomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             ElevatedButton(
-              onPressed: () async {
-                final l10n = context.l10n;
-                try {
-                  await RuncamGF.open();
-                } on PlatformException catch (e) {
-                  showAppToast(l10n.homeOpenFailed(e.code, e.message ?? ''));
-                }
-              },
-              child: Text(context.l10n.homeOpenGyroflow),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
               onPressed: _runSmoke,
               child: const Text('Run Engine Smoke (dev)'),
             ),

@@ -49,7 +49,22 @@ class _PreviewPageState extends State<PreviewPage>
     if (next != _locale) setState(() => _locale = next);
   }
 
-  void _onChange() => setState(() {});
+  void _onChange() {
+    _syncPreviewTicker();
+    setState(() {});
+  }
+
+  // 加载/分析/导出蒙版盖住预览时,停掉 60Hz 预览合成驱动:此时预览不可见,而原生正满负荷
+  // (解码 / 重算 / 同步 / 编码),再每帧重建 PreviewView 只会和原生抢 UI/光栅线程 → 蒙版转圈卡顿。
+  // 蒙版撤下后恢复 60Hz 驱动。纯 UI 优化,不影响原生与首帧逻辑(安卓首帧判定看 native produceCount)。
+  void _syncPreviewTicker() {
+    final overlayUp = _c.busy || _c.autosyncRunning || _c.exportRunning;
+    if (overlayUp) {
+      if (_ticker.isAnimating) _ticker.stop();
+    } else if (!_ticker.isAnimating) {
+      _ticker.repeat();
+    }
+  }
 
   // 点页面任意空白处:收起镜头检索结果列表。
   // 不强制收键盘 —— 镜头搜索框「有输入时」要保持键盘(其收起由搜索框自身 onTapOutside 处理)。

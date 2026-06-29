@@ -4,12 +4,11 @@ import UIKit
 /// RuncamGF Flutter 插件 — iOS 入口。
 ///
 /// Channel:
-///   - `com.runcam/gyroflow`:`open` → 全屏 modal 呈现 Gyroflow 防抖界面(GyroflowLauncher)。
 ///   - `runcam_gf_example/picker`:编辑器(PreviewPage/EditController)用的文件选择器
 ///     (UIDocumentPicker:视频/镜头/陀螺/授权目录)。原先放在 example 的 AppDelegate,
 ///     现内聚进插件 —— 宿主无需任何配置即可使用编辑器。
 ///
-/// 原样从原 App 的 GyroflowBridge 抽离: 行为不变(仍是拉起原生全屏页)。
+/// 引擎 / 预览 / 导出经 Pigeon(EngineApi/PreviewApi/EngineEvents)转发到原生薄壳;
 /// Gyroflow 的 Obj-C/Obj-C++ 源码、libgyroflow_core.a、MDK 都在同一个 pod 里。
 public class RuncamGfPlugin: NSObject, FlutterPlugin {
 
@@ -24,17 +23,10 @@ public class RuncamGfPlugin: NSObject, FlutterPlugin {
     private static var videoPicker: VideoPickerChannel?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(
-            name: "com.runcam/gyroflow",
-            binaryMessenger: registrar.messenger()
-        )
-        let instance = RuncamGfPlugin()
-        registrar.addMethodCallDelegate(instance, channel: channel)
-
         // 文件选择器通道(供编辑器选视频/镜头/陀螺/授权目录)。
         videoPicker = VideoPickerChannel(messenger: registrar.messenger())
 
-        // 阶段2:注册 Pigeon 引擎桥(与旧 `open` channel 并存,互不影响)。
+        // 阶段2:注册 Pigeon 引擎桥。
         let events = EngineEvents(binaryMessenger: registrar.messenger())
         let engine = EngineApiImpl(events: events)
         EngineApiSetup.setUp(binaryMessenger: registrar.messenger(), api: engine)
@@ -57,52 +49,6 @@ public class RuncamGfPlugin: NSObject, FlutterPlugin {
         )
         registrar.register(pvFactory, withId: "runcam_gf/preview_platformview")
         previewPVFactory = pvFactory
-    }
-
-    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        switch call.method {
-        case "open":
-            #if targetEnvironment(simulator)
-            result(FlutterError(code: "SIMULATOR_UNSUPPORTED",
-                                message: "Gyroflow 仅支持真机",
-                                details: nil))
-            #else
-            guard let rootVC = Self.topViewController() else {
-                result(FlutterError(code: "NO_CONTROLLER",
-                                    message: "找不到可呈现的 rootViewController",
-                                    details: nil))
-                return
-            }
-            let vc = GyroflowLauncher.makeRootViewController()
-            // iOS push 风格右→左滑入, 对齐 Flutter 路由过渡观感
-            if let window = rootVC.view.window {
-                let transition = CATransition()
-                transition.duration = 0.3
-                transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                transition.type = .push
-                transition.subtype = .fromRight
-                window.layer.add(transition, forKey: kCATransition)
-                rootVC.present(vc, animated: false) { result(nil) }
-            } else {
-                rootVC.present(vc, animated: true) { result(nil) }
-            }
-            #endif
-        default:
-            result(FlutterMethodNotImplemented)
-        }
-    }
-
-    /// 取当前最顶层可用于 present 的 VC。
-    private static func topViewController() -> UIViewController? {
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first { $0.activationState == .foregroundActive } as? UIWindowScene
-        let keyWindow = windowScene?.windows.first { $0.isKeyWindow }
-            ?? windowScene?.windows.first
-        var top = keyWindow?.rootViewController
-        while let presented = top?.presentedViewController {
-            top = presented
-        }
-        return top
     }
 }
 
