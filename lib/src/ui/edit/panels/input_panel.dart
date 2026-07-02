@@ -97,7 +97,9 @@ class _InputPanelState extends State<InputPanel> {
       ),
       builder: (ctx) => _LensSearchSheet(controller: c),
     );
-    if (id != null && mounted) await c.loadLens(id);
+    // 不查 mounted:loadLens 是控制器调用、不碰 UI;弹窗开着时转屏会重建本面板 State,
+    // 查了反而把用户刚选中的镜头静默丢掉。
+    if (id != null) await c.loadLens(id);
   }
 
   @override
@@ -755,6 +757,7 @@ class _LensSearchSheetState extends State<_LensSearchSheet> {
   Timer? _debounce; // 边输入边搜的防抖(对齐桌面 fork 的 live SearchField)
   bool _searching = false;
   List<Map<String, String>> _results = const [];
+  int _searchSeq = 0; // 请求序号:只接受最新一次搜索的结果(防慢请求后到覆盖新结果)
 
   @override
   void dispose() {
@@ -763,32 +766,44 @@ class _LensSearchSheetState extends State<_LensSearchSheet> {
     super.dispose();
   }
 
+  Future<void> _runSearch(String q) async {
+    final seq = ++_searchSeq;
+    setState(() => _searching = true);
+    final r = await widget.controller.searchLens(q);
+    if (!mounted || seq != _searchSeq) return; // 期间有新搜索/已清空 → 丢弃过期结果
+    setState(() {
+      _results = r;
+      _searching = false;
+    });
+  }
+
   void _onQueryChanged(String q) {
     _debounce?.cancel();
     if (q.trim().isEmpty) {
+      _searchSeq++; // 使在飞请求过期,防止清空后旧结果又冒出来
       setState(() {
         _results = const [];
         _searching = false;
       });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
-      setState(() => _searching = true);
-      final r = await widget.controller.searchLens(q);
-      if (!mounted) return;
-      setState(() {
-        _results = r;
-        _searching = false;
-      });
-    });
+    _debounce = Timer(const Duration(milliseconds: 300), () => _runSearch(q));
+  }
+
+  /// 键盘「搜索」键:取消防抖、立即搜 —— 否则挂起的防抖会在键盘收起后偷改列表。
+  void _onSubmitted(String q) {
+    _debounce?.cancel();
+    if (q.trim().isNotEmpty) _runSearch(q);
   }
 
   @override
   Widget build(BuildContext context) {
     final h = MediaQuery.sizeOf(context).height;
     final kb = MediaQuery.viewInsetsOf(context).bottom;
+    // 高度 = 键盘 + 键盘之上剩余空间的 90%:内容区恒为正,横屏矮机键盘吃掉大半屏时
+    // 也不会把输入框压出 RenderFlex overflow(固定 0.9*全屏 在横屏会小于键盘高)。
     return SizedBox(
-      height: h * 0.9,
+      height: kb + (h - kb) * 0.9,
       child: Padding(
         // 内容整体抬到键盘之上;列表 Expanded 占据剩余高度。
         padding: EdgeInsets.fromLTRB(14, 10, 14, kb + 10),
@@ -813,7 +828,11 @@ class _LensSearchSheetState extends State<_LensSearchSheet> {
               style: const TextStyle(color: GfColors.text, fontSize: 14),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: context.l10n.inputSearchLens,
+                // 用 L.current 而非 context.l10n:弹窗路由挂在宿主 Navigator 下,
+                // 不在 preview_page 的 Localizations.override 子树里 —— 宿主未注册
+                // 本插件 l10n 委托时 AppLocalizations.of(context) 为 null 会直接崩
+                // (example 注册了委托,测不出来)。L.current 是页面 build 时赋的静态引用。
+                hintText: L.current.inputSearchLens,
                 hintStyle: const TextStyle(color: GfColors.textSecondary),
                 isDense: true,
                 filled: true,
@@ -832,6 +851,7 @@ class _LensSearchSheetState extends State<_LensSearchSheet> {
                     borderSide: BorderSide.none),
               ),
               onChanged: _onQueryChanged,
+              onSubmitted: _onSubmitted,
             ),
             const SizedBox(height: 10),
             Expanded(
@@ -841,12 +861,15 @@ class _LensSearchSheetState extends State<_LensSearchSheet> {
                 itemCount: _results.length,
                 itemBuilder: (_, i) {
                   final r = _results[i];
+                  // name 恒为非空 String 但可能是空串(searchLens 只过滤空 id):
+                  // 空名退回显示 id,避免渲染成看不见但可点的空白行。
+                  final name = r['name']!;
                   return InkWell(
                     onTap: () => Navigator.of(context).pop(r['id']),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           vertical: 10, horizontal: 12),
-                      child: Text(r['name'] ?? r['id']!,
+                      child: Text(name.isNotEmpty ? name : r['id']!,
                           style: const TextStyle(
                               color: GfColors.accent, fontSize: 13)),
                     ),

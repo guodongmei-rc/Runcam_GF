@@ -105,9 +105,18 @@ class _PreviewPageState extends State<PreviewPage>
             builder: (context, c) {
               final wide = c.maxWidth >= _kWideBreakpoint;
               final phoneLandscape = !wide && c.maxWidth > c.maxHeight;
+              // 键盘是否弹起:读 View 级 inset,不订阅 MediaQuery ——
+              // ① 宿主若把本页嵌进自己的 resizing Scaffold,bottom inset 会被其消费,
+              //    MediaQuery 在这里读不到;View 级永远是真实值。
+              // ② MediaQuery 订阅会让整页 State(含蒙版层)随键盘动画逐帧重建;
+              //    本 builder 在任一层 Scaffold 因键盘 resize 时都会因约束变化重跑,
+              //    在这里读即可保证取到新值。
+              final kbUp = View.of(context).viewInsets.bottom > 0;
               final body = wide
                   ? _wideBody()
-                  : (phoneLandscape ? _phoneLandscapeBody() : _bodyColumn());
+                  : (phoneLandscape
+                      ? _phoneLandscapeBody()
+                      : _bodyColumn(kbUp: kbUp));
               // 手机横屏:不预留左右安全区(用满整宽);其余布局四周都留。
               return SafeArea(
                 left: !phoneLandscape,
@@ -290,17 +299,19 @@ class _PreviewPageState extends State<PreviewPage>
       );
 
   // 窄屏(手机/竖屏):预览 + 运动数据 + 按钮 + 底部 Tab。
-  Widget _bodyColumn() {
-    // 键盘弹起时竖屏放不下「预览 + 键盘」:预览/波形/按钮全是固定高,唯一可收缩的
-    // Tab 内容被压到 0 仍差几像素 → RenderFlex overflow。故键盘期间把预览高度减半
-    // (只缩预览,波形/按钮/布局其余部分不动),省出的高度留给正在输入的 Tab 内容。
-    // 只改 SizedBox 高度、子树不换,Texture/UiKitView 保持挂载,不会触发重新解码。
-    final kbUp = MediaQuery.viewInsetsOf(context).bottom > 0;
+  // kbUp=键盘弹起:竖屏放不下「预览 + 键盘」,固定高的部分会把唯一可收缩的 Tab 内容
+  // 压到 0 并 RenderFlex overflow。故键盘期间预览减半 + 波形减半(复用横屏的 42 半高),
+  // 省出的高度留给正在输入的 Tab 内容。预览只改 SizedBox 高度、子树不换,
+  // Texture/UiKitView 保持挂载,不会触发重新解码。
+  Widget _bodyColumn({required bool kbUp}) {
     return Column(
       children: [
         _topBar(),
         _previewBox(heightFactor: kbUp ? 0.5 : 1),
-        if (_c.uri != null) ...[const SizedBox(height: 6), _gyroTimeline()],
+        if (_c.uri != null) ...[
+          const SizedBox(height: 6),
+          _gyroTimeline(height: kbUp ? 42 : 84),
+        ],
         _controlButtons(),
         _tabBar(),
         Expanded(flex: 5, child: _tabContent()),
