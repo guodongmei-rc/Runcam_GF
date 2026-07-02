@@ -240,6 +240,11 @@ class RuncamGfPlugin :
     }
 
     override fun onDetachedFromActivity() {
+        // 最终脱离(非转屏):选择器结果已无法送达本插件,把挂起请求按「取消」收尾,
+        // 否则 pickerPending 永久占住 → 宿主重建页面后每次选文件都 BUSY。
+        // 转屏走 onDetachedFromActivityForConfigChanges,结果会在重建后补送,不在此清。
+        pickerPending?.success(null)
+        pickerPending = null
         detachActivity()
     }
 

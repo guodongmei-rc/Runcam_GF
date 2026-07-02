@@ -85,6 +85,21 @@ class EditController extends ChangeNotifier {
   }
 
   static const MethodChannel _picker = MethodChannel('runcam_gf_example/picker');
+
+  /// 调原生选择器,把 PlatformException 化为「取消」(返回 null)而不是未处理异常:
+  /// - BUSY:上一个选择器仍占用(快速连点/宿主弹出失败),静默忽略本次点击;
+  /// - 其它(NO_ACTIVITY / NO_VIEWCONTROLLER 等宿主环境问题):原生错误信息透传到 status。
+  Future<String?> _pickNative(String method) async {
+    try {
+      return await _picker.invokeMethod<String>(method);
+    } on PlatformException catch (e) {
+      if (e.code != 'BUSY') {
+        status = e.message ?? e.code;
+        notifyListeners();
+      }
+      return null;
+    }
+  }
   final EngineBridge _bridge = EngineBridgeImpl();
   final PreviewApi _previewApi = PreviewApi();
   late final ParamsModel params;
@@ -227,7 +242,7 @@ class EditController extends ChangeNotifier {
   /// 选择导出目录(原生 pickFolder:返回目录 uri/路径)。
   Future<void> pickExportFolder() async {
     try {
-      final f = await _picker.invokeMethod<String>('pickFolder');
+      final f = await _pickNative('pickFolder');
       if (f != null && f.isNotEmpty) {
         exportFolder = f;
         _persistExportFolder(f); // 记住选择,跨重启保留
@@ -625,7 +640,7 @@ class EditController extends ChangeNotifier {
     // 点「打开文件」立即暂停当前播放:选片器打开期间旧视频不再后台播放(iOS/安卓一致);
     // 用户取消选择时也保持暂停。
     await _pausePreview();
-    final picked = await _picker.invokeMethod<String>('pickVideo');
+    final picked = await _pickNative('pickVideo');
     if (picked == null) return;
     _setBusy(true);
     // 重新打开视频前:先彻底拆掉上一个预览后端(停旧解码线程 + 释放 wgpu surface)。
@@ -844,7 +859,7 @@ class EditController extends ChangeNotifier {
     if (uri == null) return;
     _setBusy(true);
     try {
-      final folder = await _picker.invokeMethod<String>('pickFolder');
+      final folder = await _pickNative('pickFolder');
       if (folder == null) return; // 用户取消(不置已授权)
       _folderAuthorized = true; // 授权后不再显示蓝框(无论是否扫到文件)
       _authorizedFolder = folder; // 记住目录,供后续视频自动重扫(见 _autoRescanSidecars)
@@ -1132,7 +1147,7 @@ class EditController extends ChangeNotifier {
   /// 仅接受 .json 镜头档案;选了其它类型则提示并不加载(跨端统一在此校验扩展名)。
   Future<void> openLensFile() async {
     if (uri == null || busy) return;
-    final picked = await _picker.invokeMethod<String>('pickLensFile');
+    final picked = await _pickNative('pickLensFile');
     if (picked == null) return;
     if (_extOf(picked) != 'JSON') {
       status = L.current.ctlLensWrongType;
@@ -1146,7 +1161,7 @@ class EditController extends ChangeNotifier {
   /// 仅接受 .gcsv 运动数据;选了其它类型则提示并不加载。
   Future<void> openMotionFile() async {
     if (uri == null || busy) return;
-    final picked = await _picker.invokeMethod<String>('pickMotionFile');
+    final picked = await _pickNative('pickMotionFile');
     if (picked == null) return;
     // 接受全部受支持的运动数据格式(与目录扫描 scanFolderForSidecars 的 motionExts 对齐)。
     const motionExts = {'GCSV', 'BBL', 'BFL', 'CSV'};

@@ -99,13 +99,22 @@ final class VideoPickerChannel: NSObject, UIDocumentPickerDelegate {
     pendingResult = result
     pendingIsFolder = false
     DispatchQueue.main.async {
+      // 宿主 App 此刻可能没有可弹出的前台 VC(scene 未激活/keyWindow 缺失/正在转场)。
+      // 若不检查就静默失败,pendingResult 会永久占住 → 之后每次选文件都 BUSY。
+      guard let host = self.rootViewController() else {
+        self.pendingResult = nil
+        result(FlutterError(
+          code: "NO_VIEWCONTROLLER",
+          message: "no foreground view controller to present picker", details: nil))
+        return
+      }
       // 用 iOS 8+ 的老 API(不依赖 iOS 14 的 UTType),.import 模式把文件拷进
       // 沙盒临时目录(轨道完整、无需 security-scope),delegate 返回该副本路径。
       let picker = UIDocumentPickerViewController(
         documentTypes: types, in: .import)
       picker.delegate = self
       picker.allowsMultipleSelection = false
-      self.rootViewController()?.present(picker, animated: true)
+      host.present(picker, animated: true)
     }
   }
 
@@ -118,12 +127,21 @@ final class VideoPickerChannel: NSObject, UIDocumentPickerDelegate {
     pendingResult = result
     pendingIsFolder = true
     DispatchQueue.main.async {
+      // 同 present(types:):弹不出来必须立刻释放占位,否则永久 BUSY。
+      guard let host = self.rootViewController() else {
+        self.pendingResult = nil
+        self.pendingIsFolder = false
+        result(FlutterError(
+          code: "NO_VIEWCONTROLLER",
+          message: "no foreground view controller to present picker", details: nil))
+        return
+      }
       // 用老 API(documentTypes + .open),不依赖 iOS 14 的 UTType.folder;"public.folder" 即目录 UTI。
       let picker = UIDocumentPickerViewController(
         documentTypes: ["public.folder"], in: .open)
       picker.delegate = self
       picker.allowsMultipleSelection = false
-      self.rootViewController()?.present(picker, animated: true)
+      host.present(picker, animated: true)
     }
   }
 
@@ -231,7 +249,11 @@ final class VideoPickerChannel: NSObject, UIDocumentPickerDelegate {
   private func rootViewController() -> UIViewController? {
     let scene = UIApplication.shared.connectedScenes
       .first { $0.activationState == .foregroundActive } as? UIWindowScene
+    // 宿主 App 可能没有 keyWindow / scene 尚未激活(多窗口、自建 window 的工程):
+    // 逐级回退到 scene 首个 window、老式 AppDelegate window,尽量找到能弹选择器的 VC。
     var vc = scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+      ?? scene?.windows.first?.rootViewController
+      ?? UIApplication.shared.delegate?.window??.rootViewController
     while let presented = vc?.presentedViewController { vc = presented }
     return vc
   }
