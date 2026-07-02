@@ -66,12 +66,6 @@ class _PreviewPageState extends State<PreviewPage>
     }
   }
 
-  // 点页面任意空白处:收起镜头检索结果列表。
-  // 不强制收键盘 —— 镜头搜索框「有输入时」要保持键盘(其收起由搜索框自身 onTapOutside 处理)。
-  void _dismissLensOverlay() {
-    _c.clearLensResults();
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -107,25 +101,20 @@ class _PreviewPageState extends State<PreviewPage>
         children: [
           // 三套布局:① 宽屏(iPad 横屏,≥_kWideBreakpoint)三栏;② 手机横屏两栏
           // (左 预览/运动数据/按钮 4 : 右 Tab 3);③ 竖屏 走原 Tab 单列。
-          // 包一层 GestureDetector:点页面任意空白处收起镜头检索列表(子控件照常响应)。
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: _dismissLensOverlay,
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final wide = c.maxWidth >= _kWideBreakpoint;
-                final phoneLandscape = !wide && c.maxWidth > c.maxHeight;
-                final body = wide
-                    ? _wideBody()
-                    : (phoneLandscape ? _phoneLandscapeBody() : _bodyColumn());
-                // 手机横屏:不预留左右安全区(用满整宽);其余布局四周都留。
-                return SafeArea(
-                  left: !phoneLandscape,
-                  right: !phoneLandscape,
-                  child: body,
-                );
-              },
-            ),
+          LayoutBuilder(
+            builder: (context, c) {
+              final wide = c.maxWidth >= _kWideBreakpoint;
+              final phoneLandscape = !wide && c.maxWidth > c.maxHeight;
+              final body = wide
+                  ? _wideBody()
+                  : (phoneLandscape ? _phoneLandscapeBody() : _bodyColumn());
+              // 手机横屏:不预留左右安全区(用满整宽);其余布局四周都留。
+              return SafeArea(
+                left: !phoneLandscape,
+                right: !phoneLandscape,
+                child: body,
+              );
+            },
           ),
           // 加载视频蒙版(转圈)。
           if (_c.busy) _busyOverlay(L.current.prevLoadingVideo),
@@ -175,9 +164,10 @@ class _PreviewPageState extends State<PreviewPage>
       );
 
   // 窄屏预览区:固定高度 =(可用宽 − 20)× 9/16(16:9 左右各留 10);宽 = 高 × 比例(AspectRatio 自动)。
-  Widget _previewBox() => LayoutBuilder(
+  // heightFactor:高度缩放(键盘弹起时传 0.5 只缩预览,画面按比例居中变小)。
+  Widget _previewBox({double heightFactor = 1}) => LayoutBuilder(
         builder: (context, constraints) {
-          final previewH = (constraints.maxWidth - 20) * 9 / 16;
+          final previewH = (constraints.maxWidth - 20) * 9 / 16 * heightFactor;
           return SizedBox(
             height: previewH,
             width: double.infinity,
@@ -301,10 +291,15 @@ class _PreviewPageState extends State<PreviewPage>
 
   // 窄屏(手机/竖屏):预览 + 运动数据 + 按钮 + 底部 Tab。
   Widget _bodyColumn() {
+    // 键盘弹起时竖屏放不下「预览 + 键盘」:预览/波形/按钮全是固定高,唯一可收缩的
+    // Tab 内容被压到 0 仍差几像素 → RenderFlex overflow。故键盘期间把预览高度减半
+    // (只缩预览,波形/按钮/布局其余部分不动),省出的高度留给正在输入的 Tab 内容。
+    // 只改 SizedBox 高度、子树不换,Texture/UiKitView 保持挂载,不会触发重新解码。
+    final kbUp = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Column(
       children: [
         _topBar(),
-        _previewBox(),
+        _previewBox(heightFactor: kbUp ? 0.5 : 1),
         if (_c.uri != null) ...[const SizedBox(height: 6), _gyroTimeline()],
         _controlButtons(),
         _tabBar(),

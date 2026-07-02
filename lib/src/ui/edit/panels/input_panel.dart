@@ -22,11 +22,6 @@ class InputPanel extends StatefulWidget {
 class _InputPanelState extends State<InputPanel> {
   late final TextEditingController _imu =
       TextEditingController(text: widget.controller.imuOrientation);
-  final TextEditingController _lensQuery = TextEditingController();
-  // 搜索框焦点:tap-outside 收键盘(对齐「同步搜索尺寸」数值框的交互)。
-  final FocusNode _lensFocus = FocusNode();
-  bool _searching = false;
-  Timer? _lensSearchDebounce; // 边输入边搜的防抖
 
   // 镜头「高级」段:展开开关 + 8 个可编辑数值框 + 已回填的镜头加载序号。
   bool _advancedOpen = false;
@@ -61,10 +56,7 @@ class _InputPanelState extends State<InputPanel> {
 
   @override
   void dispose() {
-    _lensSearchDebounce?.cancel();
     _imu.dispose();
-    _lensQuery.dispose();
-    _lensFocus.dispose();
     for (final t in [
       _fx, _fy, _cx, _cy, _d0, _d1, _d2, _d3, //
       _lpfHz, _frameOffset, _medianSamples, //
@@ -93,39 +85,19 @@ class _InputPanelState extends State<InputPanel> {
     _d3.text = f(dist(3));
   }
 
-  Future<void> _runLensSearch(String q) async {
-    setState(() => _searching = true);
-    final r = await c.searchLens(q);
-    if (!mounted) return;
-    c.setLensResults(r); // 结果提到控制器,便于页面任意处收起
-    setState(() => _searching = false);
-  }
-
-  /// 点键盘「完成」:取消待执行搜索、收起键盘、收起搜索结果列表。
-  void _onLensSearchDone(String _) {
-    _lensSearchDebounce?.cancel();
-    _lensFocus.unfocus(); // 收起键盘
-    c.clearLensResults(); // 收起搜索列表
-    setState(() => _searching = false);
-  }
-
-  /// 边输入边搜(防抖 300ms,对齐桌面 fork 的 live SearchField);清空则立即清结果。
-  void _onLensQueryChanged(String q) {
-    _lensSearchDebounce?.cancel();
-    if (q.trim().isEmpty) {
-      c.clearLensResults();
-      setState(() => _searching = false);
-      return;
-    }
-    _lensSearchDebounce =
-        Timer(const Duration(milliseconds: 300), () => _runLensSearch(q));
-  }
-
-  Future<void> _pickLens(String id) async {
-    await c.loadLens(id);
-    if (!mounted) return;
-    c.clearLensResults();
-    _lensQuery.clear();
+  /// 点搜索框 → 底部弹窗搜索(弹窗内自带输入框+结果列表,键盘之上仍有大半屏
+  /// 显示结果;竖屏内嵌列表被键盘挤压的问题由此规避)。选中一条返回其 id 加载。
+  Future<void> _openLensSearchSheet() async {
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true, // 允许超过半屏
+      backgroundColor: GfColors.bgPanel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (ctx) => _LensSearchSheet(controller: c),
+    );
+    if (id != null && mounted) await c.loadLens(id);
   }
 
   @override
@@ -267,84 +239,45 @@ class _InputPanelState extends State<InputPanel> {
         ),
       );
 
-  // 检索结果列表(直接在搜索框下方、盖住「打开文件」):圆角卡片,最多 240 高、超出可滚,
-  // 点击某条加载该镜头(_pickLens 会清空结果 → 列表收起、按钮恢复)。
-  Widget _lensResultsList() => Material(
-        color: GfColors.inputBg,
-        borderRadius: BorderRadius.circular(8),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 240),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final r in c.lensResults)
-                  InkWell(
-                    onTap: () => _pickLens(r['id']!),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 12),
-                      child: Text(r['name'] ?? r['id']!,
-                          style: const TextStyle(
-                              color: GfColors.accent, fontSize: 13)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
-
   // ---- 镜头配置文件 ----
   List<Widget> _lensProfile() => [
         _title(context.l10n.inputLensProfile),
         const SizedBox(height: 10),
-        // 搜索框(回车搜索内置镜头库)。
-        TextField(
-          controller: _lensQuery,
-          focusNode: _lensFocus,
-          // 有输入内容时,点空白处不收键盘(方便继续修改检索词);无内容时才收起。
-          onTapOutside: (_) {
-            if (_lensQuery.text.trim().isEmpty) _lensFocus.unfocus();
-          },
-          enabled: c.uri != null,
-          style: const TextStyle(color: GfColors.text, fontSize: 14),
-          textInputAction: TextInputAction.done, // 键盘右下角显示「完成」
-          decoration: InputDecoration(
-            hintText: context.l10n.inputSearchLens,
-            hintStyle: const TextStyle(color: GfColors.textSecondary),
-            isDense: true,
-            filled: true,
-            fillColor: GfColors.inputBg,
-            suffixIcon: _searching
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2)))
-                : const Icon(Icons.search, color: GfColors.textSecondary, size: 18),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-          ),
-          onChanged: _onLensQueryChanged, // 跟随输入实时搜索(防抖)
-          onSubmitted: _onLensSearchDone, // 点「完成」:收起键盘 + 搜索列表
-        ),
-        const SizedBox(height: 10),
-        // 有检索结果:列表直接显示在输入框下方,盖住「打开文件」按钮;无结果时显示按钮。
-        if (c.lensResults.isNotEmpty)
-          _lensResultsList()
-        else
-          // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
-          Center(
-            child: SizedBox(
-              width: 180,
-              child: _primaryButton(context.l10n.inputOpenFile,
-                  (c.busy || c.uri == null) ? null : c.openLensFile),
+        // 「搜索框」外观的入口(与 TextField 同款底色/圆角):点击弹底部搜索弹窗,
+        // 不在面板内直接输入 —— 竖屏键盘弹起后面板视口太小,内嵌列表放不下。
+        InkWell(
+          onTap: c.uri == null ? null : _openLensSearchSheet,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: GfColors.inputBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.inputSearchLens,
+                    style: const TextStyle(
+                        color: GfColors.textSecondary, fontSize: 14),
+                  ),
+                ),
+                const Icon(Icons.search,
+                    color: GfColors.textSecondary, size: 18),
+              ],
             ),
           ),
+        ),
+        const SizedBox(height: 10),
+        // 打开文件:选本地 .json 镜头档案(接 openLensFile),居中、宽 180、同款按钮。
+        Center(
+          child: SizedBox(
+            width: 180,
+            child: _primaryButton(context.l10n.inputOpenFile,
+                (c.busy || c.uri == null) ? null : c.openLensFile),
+          ),
+        ),
         // 镜头提示(对齐桌面 Gyroflow,载入视频后):
         //   未加载镜头 → 橙色警告(请加载镜头);已加载但宽高比不符 → 红色;仅尺寸不符 → 橙色。
         if (c.uri != null && !c.hasLensProfile) ...[
@@ -803,6 +736,127 @@ class _InputPanelState extends State<InputPanel> {
                   fontSize: 14)),
         ),
       ]),
+    );
+  }
+}
+
+/// 镜头搜索底部弹窗:自带输入框(自动聚焦、防抖 300ms 实时搜索)+ 结果列表。
+/// 固定高约 90% 屏,内容整体让位于键盘 —— 键盘之上仍有大半屏显示结果,
+/// 解决竖屏内嵌列表被键盘压扁的问题。选中一条 pop 返回其 id;下滑/点暗处取消。
+class _LensSearchSheet extends StatefulWidget {
+  const _LensSearchSheet({required this.controller});
+  final EditController controller;
+  @override
+  State<_LensSearchSheet> createState() => _LensSearchSheetState();
+}
+
+class _LensSearchSheetState extends State<_LensSearchSheet> {
+  final TextEditingController _query = TextEditingController();
+  Timer? _debounce; // 边输入边搜的防抖(对齐桌面 fork 的 live SearchField)
+  bool _searching = false;
+  List<Map<String, String>> _results = const [];
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _query.dispose();
+    super.dispose();
+  }
+
+  void _onQueryChanged(String q) {
+    _debounce?.cancel();
+    if (q.trim().isEmpty) {
+      setState(() {
+        _results = const [];
+        _searching = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      setState(() => _searching = true);
+      final r = await widget.controller.searchLens(q);
+      if (!mounted) return;
+      setState(() {
+        _results = r;
+        _searching = false;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = MediaQuery.sizeOf(context).height;
+    final kb = MediaQuery.viewInsetsOf(context).bottom;
+    return SizedBox(
+      height: h * 0.9,
+      child: Padding(
+        // 内容整体抬到键盘之上;列表 Expanded 占据剩余高度。
+        padding: EdgeInsets.fromLTRB(14, 10, 14, kb + 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 顶部拖拽把手(提示可下滑关闭)。
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: GfColors.textSecondary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            TextField(
+              controller: _query,
+              autofocus: true, // 弹窗即输入,直接调起键盘
+              style: const TextStyle(color: GfColors.text, fontSize: 14),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: context.l10n.inputSearchLens,
+                hintStyle: const TextStyle(color: GfColors.textSecondary),
+                isDense: true,
+                filled: true,
+                fillColor: GfColors.inputBg,
+                suffixIcon: _searching
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2)))
+                    : const Icon(Icons.search,
+                        color: GfColors.textSecondary, size: 18),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
+              ),
+              onChanged: _onQueryChanged,
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag, // 滚列表先收键盘
+                itemCount: _results.length,
+                itemBuilder: (_, i) {
+                  final r = _results[i];
+                  return InkWell(
+                    onTap: () => Navigator.of(context).pop(r['id']),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 12),
+                      child: Text(r['name'] ?? r['id']!,
+                          style: const TextStyle(
+                              color: GfColors.accent, fontSize: 13)),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

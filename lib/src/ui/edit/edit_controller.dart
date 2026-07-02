@@ -432,20 +432,7 @@ class EditController extends ChangeNotifier {
     params.backgroundMode = (params.backgroundMode + 1) % 3;
   }
 
-  // 镜头配置(「输入」面板)。
-  // 镜头搜索结果(提到控制器:供输入面板显示 + 「点屏幕任意处」收起列表)。
-  List<Map<String, String>> lensResults = const [];
-  void setLensResults(List<Map<String, String>> r) {
-    lensResults = r;
-    notifyListeners();
-  }
-
-  void clearLensResults() {
-    if (lensResults.isEmpty) return;
-    lensResults = const [];
-    notifyListeners();
-  }
-
+  // 镜头配置(「输入」面板)。搜索结果不再挂控制器:底部搜索弹窗内自持状态。
   String? detectedCamera; // 「检测到的相机」
   String? detectedLens; // 「检测镜头」
   String lensName = L.current.ctlNoLensProfile;
