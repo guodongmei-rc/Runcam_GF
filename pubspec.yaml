@@ -1,6 +1,6 @@
 name: runcam_gf
 description: "RuncamGF — Gyroflow 视频防抖原生集成(iOS/Android)Flutter 插件。"
-version: 0.1.0
+version: 0.2.0
 homepage: https://gyroflow.xyz
 # 私有分发(path/git 依赖):编辑器吐司用了 toastification 的 git fork,
 # 故不发布到 pub.dev。宿主以 path 或 git 依赖本插件。

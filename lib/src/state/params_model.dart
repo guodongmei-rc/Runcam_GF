@@ -10,7 +10,8 @@ part 'params_model_zoom.dart';
 part 'params_model_advanced.dart';
 
 /// 参数面板的全量状态。每个 setter:clamp → 立即推引擎 → 200ms 合并防抖
-/// → recomputeBlocking → 回填只读输出。权威逻辑镜像 ios/Sources/ParamsModel.m。
+/// → recomputeBlocking → 回填只读输出。逻辑誊写自原生 ParamsModel.m(已随原生 UI
+/// 删除,历史版本:git show 3b3c53e^:ios/Sources/ParamsModel.m);本文件即当前事实源。
 class ParamsModel extends ChangeNotifier {
   ParamsModel(this.bridge);
 

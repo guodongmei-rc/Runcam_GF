@@ -9,14 +9,6 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get homeOpenGyroflow => 'Open Gyroflow Stabilization';
-
-  @override
-  String homeOpenFailed(String code, String message) {
-    return 'Open failed: $code $message';
-  }
-
-  @override
   String homeSmokeFailedPlatform(String code, String message) {
     return 'Smoke test failed: $code $message';
   }
@@ -441,11 +433,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ctlRootDir => 'Root directory';
-
-  @override
-  String ctlSelectFolderFailed(String error) {
-    return 'Failed to select folder: $error';
-  }
 
   @override
   String get ctlInitializingExport => 'Initializing export…';

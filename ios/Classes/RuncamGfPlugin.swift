@@ -91,57 +91,62 @@ final class VideoPickerChannel: NSObject, UIDocumentPickerDelegate {
     }
   }
 
+  // 普通文件:.import 模式把文件拷进沙盒临时目录(轨道完整、无需 security-scope),
+  // delegate 返回该副本路径。用 iOS 8+ 的老 API(不依赖 iOS 14 的 UTType)。
   private func present(types: [String], result: @escaping FlutterResult) {
-    if pendingResult != nil {
-      result(FlutterError(code: "BUSY", message: "picker already active", details: nil))
-      return
-    }
-    pendingResult = result
-    pendingIsFolder = false
-    DispatchQueue.main.async {
-      // 宿主 App 此刻可能没有可弹出的前台 VC(scene 未激活/keyWindow 缺失/正在转场)。
-      // 若不检查就静默失败,pendingResult 会永久占住 → 之后每次选文件都 BUSY。
-      guard let host = self.rootViewController() else {
-        self.pendingResult = nil
-        result(FlutterError(
-          code: "NO_VIEWCONTROLLER",
-          message: "no foreground view controller to present picker", details: nil))
-        return
-      }
-      // 用 iOS 8+ 的老 API(不依赖 iOS 14 的 UTType),.import 模式把文件拷进
-      // 沙盒临时目录(轨道完整、无需 security-scope),delegate 返回该副本路径。
-      let picker = UIDocumentPickerViewController(
-        documentTypes: types, in: .import)
-      picker.delegate = self
-      picker.allowsMultipleSelection = false
-      host.present(picker, animated: true)
-    }
+    presentPicker(types: types, mode: .import, isFolder: false, result: result)
   }
 
   // 弹系统目录选择器,授权目录后返回其 file:// 绝对串。对齐原生 ViewController.selectMotionFolder。
+  // 用老 API(documentTypes + .open),不依赖 iOS 14 的 UTType.folder;"public.folder" 即目录 UTI。
   private func presentFolder(result: @escaping FlutterResult) {
-    if pendingResult != nil {
-      result(FlutterError(code: "BUSY", message: "picker already active", details: nil))
-      return
-    }
-    pendingResult = result
-    pendingIsFolder = true
+    presentPicker(types: ["public.folder"], mode: .open, isFolder: true, result: result)
+  }
+
+  // 占位代际:present 失败的延迟回收只回收自己那一代,不误伤后续新请求的占位。
+  private var pendingSeq = 0
+
+  /// 统一的选择器弹出路径。BUSY 检查、占位、弹出、失败回收全在主队列同一闭包里完成,
+  /// 且占位只在确认拿到宿主 VC 之后才置 —— 避免「先置后清」需要多处手动同步的状态。
+  private func presentPicker(
+    types: [String], mode: UIDocumentPickerMode, isFolder: Bool,
+    result: @escaping FlutterResult
+  ) {
     DispatchQueue.main.async {
-      // 同 present(types:):弹不出来必须立刻释放占位,否则永久 BUSY。
+      if self.pendingResult != nil {
+        result(FlutterError(code: "BUSY", message: "picker already active", details: nil))
+        return
+      }
+      // 宿主 App 此刻可能没有可弹出的前台 VC(scene 未激活/keyWindow 缺失):
+      // 若不检查就静默失败,pendingResult 会永久占住 → 之后每次选文件都 BUSY。
       guard let host = self.rootViewController() else {
-        self.pendingResult = nil
-        self.pendingIsFolder = false
         result(FlutterError(
           code: "NO_VIEWCONTROLLER",
           message: "no foreground view controller to present picker", details: nil))
         return
       }
-      // 用老 API(documentTypes + .open),不依赖 iOS 14 的 UTType.folder;"public.folder" 即目录 UTI。
-      let picker = UIDocumentPickerViewController(
-        documentTypes: ["public.folder"], in: .open)
+      let picker = UIDocumentPickerViewController(documentTypes: types, in: mode)
       picker.delegate = self
       picker.allowsMultipleSelection = false
+      self.pendingResult = result
+      self.pendingIsFolder = isFolder
+      self.pendingSeq += 1
+      let seq = self.pendingSeq
       host.present(picker, animated: true)
+      // present 在宿主 VC 正在转场/已被其它弹层占用时会静默失败(UIKit 只打 log、
+      // 不回调 delegate),占位同样会永久卡死。延迟核实真的挂上了;没挂上则回收占位
+      // 并报错(Dart 侧 _pickNative 会把该错误透出到 status)。
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak picker] in
+        guard let self = self, self.pendingSeq == seq, self.pendingResult != nil else { return }
+        if picker?.presentingViewController == nil {
+          let r = self.pendingResult
+          self.pendingResult = nil
+          self.pendingIsFolder = false
+          r?(FlutterError(
+            code: "PRESENT_FAILED",
+            message: "document picker failed to present", details: nil))
+        }
+      }
     }
   }
 

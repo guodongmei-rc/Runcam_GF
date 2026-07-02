@@ -215,6 +215,7 @@ class RuncamGfPlugin :
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        pickerPending = null // 引擎销毁:Dart 侧已不在,挂起的选择器请求直接丢弃
         pickerChannel.setMethodCallHandler(null)
         EngineApi.setUp(binding.binaryMessenger, null)
         PreviewApi.setUp(binding.binaryMessenger, null)
@@ -240,11 +241,10 @@ class RuncamGfPlugin :
     }
 
     override fun onDetachedFromActivity() {
-        // 最终脱离(非转屏):选择器结果已无法送达本插件,把挂起请求按「取消」收尾,
-        // 否则 pickerPending 永久占住 → 宿主重建页面后每次选文件都 BUSY。
-        // 转屏走 onDetachedFromActivityForConfigChanges,结果会在重建后补送,不在此清。
-        pickerPending?.success(null)
-        pickerPending = null
+        // 不在此冲掉 pickerPending:系统在选择器前台时销毁宿主 Activity(低内存/
+        // 「不保留活动」)会走到这里,但重建的 Activity 重新 attach 后 onActivityResult
+        // 仍会补送真实结果 —— 提前按「取消」收尾会把用户的选择静默丢弃。
+        // 挂起请求的兜底清理在 onDetachedFromEngine(Dart 侧已随引擎销毁)。
         detachActivity()
     }
 

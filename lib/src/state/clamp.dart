@@ -1,4 +1,5 @@
-/// 数值参数 clamp 工具 + 各参数区间。区间来源:ios/Sources/ParamsModel.h 注释。
+/// 数值参数 clamp 工具 + 各参数区间。区间誊写自原生 ParamsModel.h 注释(已随原生 UI
+/// 删除,历史版本:git show 3b3c53e^:ios/Sources/ParamsModel.h);本文件即当前事实源。
 double clampD(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
 int clampI(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 

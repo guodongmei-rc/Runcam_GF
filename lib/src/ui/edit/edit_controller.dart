@@ -94,7 +94,8 @@ class EditController extends ChangeNotifier {
       return await _picker.invokeMethod<String>(method);
     } on PlatformException catch (e) {
       if (e.code != 'BUSY') {
-        status = e.message ?? e.code;
+        // 走通用本地化模板包一层(原生错误文案是硬编码的,直接透传会绕过 i18n)。
+        status = L.current.ctlFailed(e.message ?? e.code);
         notifyListeners();
       }
       return null;
@@ -240,16 +241,12 @@ class EditController extends ChangeNotifier {
   }
 
   /// 选择导出目录(原生 pickFolder:返回目录 uri/路径)。
+  /// 错误处理在 _pickNative 内统一完成(取消/失败都返回 null),无需再包 try/catch。
   Future<void> pickExportFolder() async {
-    try {
-      final f = await _pickNative('pickFolder');
-      if (f != null && f.isNotEmpty) {
-        exportFolder = f;
-        _persistExportFolder(f); // 记住选择,跨重启保留
-        notifyListeners();
-      }
-    } catch (e) {
-      status = L.current.ctlSelectFolderFailed('$e');
+    final f = await _pickNative('pickFolder');
+    if (f != null && f.isNotEmpty) {
+      exportFolder = f;
+      _persistExportFolder(f); // 记住选择,跨重启保留
       notifyListeners();
     }
   }
@@ -360,11 +357,22 @@ class EditController extends ChangeNotifier {
     } catch (_) {/* 恢复失败:预览可能需重开视频 */}
   }
 
+  int _lastExportNotifyPct = -1; // 上次通知的整百分比(节流用)
+  int _lastExportNotifyMs = 0; // 上次通知的导出时钟毫秒(节流兜底)
+
   void _onExportProgress((double, int, int) e) {
     if (!exportRunning) return;
     exportProgressValue = e.$1;
     exportFrame = e.$2;
     if (e.$3 > 0) exportTotal = e.$3;
+    // Android 原生按「每编码一帧」回报(iOS 原生已按 1% 节流):不节流的话蒙版
+    // 底下的整页会以编码帧率逐帧重建,和原生导出抢 UI/raster 线程。
+    // 按整百分比变化通知,200ms 兜底保证耗时/剩余估算也在动。
+    final pct = (e.$1 * 100).floor();
+    final nowMs = _exportClock.elapsedMilliseconds;
+    if (pct == _lastExportNotifyPct && nowMs - _lastExportNotifyMs < 200) return;
+    _lastExportNotifyPct = pct;
+    _lastExportNotifyMs = nowMs;
     notifyListeners(); // 完成/失败由 startExport 的返回值收尾
   }
 
@@ -843,7 +851,10 @@ class EditController extends ChangeNotifier {
   /// 对齐原生 selectMotionFolder + scanGrantedFolder。目录枚举在原生(content://、
   /// iOS 安全作用域 dart:io 读不到),Dart 只编排。
   Future<void> authorizeVideoFolder() async {
-    if (uri == null) return;
+    // busy 防重入(对齐 openLensFile/openMotionFile):重建前一帧内的第二次点击
+    // 会经 BUSY→null 提前返回,其 finally 会把首次流程的 busy 提前放下 →
+    // 遮罩消失、用户可与进行中的 recompute 并发动引擎。
+    if (uri == null || busy) return;
     _setBusy(true);
     try {
       final folder = await _pickNative('pickFolder');

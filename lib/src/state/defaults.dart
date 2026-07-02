@@ -1,4 +1,5 @@
-/// ParamsModel 各参数默认值。权威来源:ios/Sources/ParamsModel.m init()。
+/// ParamsModel 各参数默认值。誊写自原生 ParamsModel.m init()(已随原生 UI 删除,
+/// 历史版本:git show 3b3c53e^:ios/Sources/ParamsModel.m);本文件即当前事实源。
 class ParamsDefaults {
   ParamsDefaults._();
 

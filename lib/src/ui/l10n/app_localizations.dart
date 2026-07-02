@@ -98,18 +98,6 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
-  /// No description provided for @homeOpenGyroflow.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Gyroflow Stabilization'**
-  String get homeOpenGyroflow;
-
-  /// No description provided for @homeOpenFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Open failed: {code} {message}'**
-  String homeOpenFailed(String code, String message);
-
   /// No description provided for @homeSmokeFailedPlatform.
   ///
   /// In en, this message translates to:
@@ -888,12 +876,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Root directory'**
   String get ctlRootDir;
-
-  /// No description provided for @ctlSelectFolderFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to select folder: {error}'**
-  String ctlSelectFolderFailed(String error);
 
   /// No description provided for @ctlInitializingExport.
   ///

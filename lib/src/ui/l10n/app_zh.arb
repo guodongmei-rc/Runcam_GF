@@ -1,8 +1,6 @@
 {
   "@@locale": "zh",
 
-  "homeOpenGyroflow": "打开 Gyroflow 防抖",
-  "homeOpenFailed": "打开失败:{code} {message}",
   "homeSmokeFailedPlatform": "smoke 失败:{code} {message}",
   "homeSmokeFailed": "smoke 失败:{error}",
   "homePreviewTexture": "预览 Texture spike (dev)",
@@ -139,7 +137,6 @@
   "ctlApplyOutputSizeFailed": "应用输出大小失败:{error}",
   "ctlSelectExportFolder": "请选择导出目录",
   "ctlRootDir": "根目录",
-  "ctlSelectFolderFailed": "选择目录失败:{error}",
   "ctlInitializingExport": "正在初始化导出…",
   "ctlExportComplete": "导出完成:{path}",
   "ctlExportCancelled": "已取消导出",

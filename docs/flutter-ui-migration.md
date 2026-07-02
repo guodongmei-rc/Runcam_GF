@@ -372,8 +372,8 @@ PreviewApi 增补:`autosyncStart / autosyncCancel`。喂帧不过 channel(高频
 
 ### 4.3 文件选择 / 权限(保留原生,Dart 触发)
 - 选视频/镜头/陀螺/导出目录:用 `file_picker` 插件或自写 PlatformChannel。
-- iOS:`UIDocumentPicker` + security-scoped bookmark(保留 `GFBookmarkStore`),拿到 URL 后调
-  `EngineApi.folderAccessGranted(url)`。
+- iOS:`UIDocumentPicker` + security-scoped bookmark(书签持久化已并入插件 `VideoPickerChannel`,
+  `GFBookmarkStore` 已随原生 UI 移除),拿到 URL 后调 `EngineApi.folderAccessGranted(url)`。
 - Android:SAF(`ACTION_OPEN_DOCUMENT` / `OPEN_DOCUMENT_TREE`),tree URI 授权后调
   `folderAccessGranted(treeUri)`。
 - 这两套差异大,**不强行统一**,只把"选完返回的 uri/path"交给 Dart 编排。
@@ -391,7 +391,8 @@ PreviewApi 增补:`autosyncStart / autosyncCancel`。喂帧不过 channel(高频
 - Android:`Gyroflow{Stabilize,Sync,Export,Motion,Advanced}Panel.kt`、`GyroflowViews.kt`、`GyroTimelineView.kt`、`OrientationIndicatorView.kt`、`GyroflowTheme.kt`、`GyroflowActivity` 的 UI 部分。
 
 **保留(原生薄壳):**
-- iOS:MDK 集成、Metal 渲染、`GFExportUtils`(导出)、`GFBookmarkStore`(书签)、解码 + `process_frame_metal_bgra8` 调用。
+- iOS:MDK 集成、Metal 渲染、`GFExportUtils`(导出)、解码 + `process_frame_metal_bgra8` 调用。
+  (`GFBookmarkStore` 原计划保留,后其书签持久化并入插件 `VideoPickerChannel`,文件已随原生 UI 删除。)
 - Android:`VideoDecoder.kt`、`YuvPacker.kt`、`GyroflowExporter.kt`、`GyroflowAutosync.kt`(喂帧)、wgpu 渲染、SAF。
 - 两端:`gyroflow_ffi.h` / `GyroflowNative.kt`(**完全不动**)+ 新增 `EngineApiImpl` / `PreviewApiImpl` forwarding 薄壳。
 

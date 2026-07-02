@@ -1,11 +1,6 @@
 {
   "@@locale": "en",
 
-  "homeOpenGyroflow": "Open Gyroflow Stabilization",
-  "homeOpenFailed": "Open failed: {code} {message}",
-  "@homeOpenFailed": {
-    "placeholders": { "code": { "type": "String" }, "message": { "type": "String" } }
-  },
   "homeSmokeFailedPlatform": "Smoke test failed: {code} {message}",
   "@homeSmokeFailedPlatform": {
     "placeholders": { "code": { "type": "String" }, "message": { "type": "String" } }
@@ -171,8 +166,6 @@
   "@ctlApplyOutputSizeFailed": { "placeholders": { "error": { "type": "String" } } },
   "ctlSelectExportFolder": "Select export folder",
   "ctlRootDir": "Root directory",
-  "ctlSelectFolderFailed": "Failed to select folder: {error}",
-  "@ctlSelectFolderFailed": { "placeholders": { "error": { "type": "String" } } },
   "ctlInitializingExport": "Initializing export…",
   "ctlExportComplete": "Export complete: {path}",
   "@ctlExportComplete": { "placeholders": { "path": { "type": "String" } } },

@@ -1,7 +1,7 @@
 part of 'params_model.dart';
 
 /// 高级组 + 同步组 + 导出组参数。同库 part:extension 直接读写主类私有字段
-/// _x,用 notify() 通知。权威分类镜像 ios/Sources/ParamsModel.m:
+/// _x,用 notify() 通知。分类誊写自原生 ParamsModel.m(已删,历史见 git):
 /// - bg 4 通道 → pushBackgroundColor + recompute
 /// - backgroundMode / showSafeArea / imuLpfHz → 接 FFI + recompute
 /// - showDetectedFeatures / showOpticalFlow → 接 FFI 但不 recompute(绘制标志)

@@ -29,9 +29,8 @@ plugins {
 android {
     // namespace 必须为 com.runcam.runcam_gf:不能用 com.runcam.runcam,否则与主 App
     // 模块(android/app namespace=com.runcam.runcam)冲突,AGP 报 "Namespace is used in
-    // multiple modules"。本库的 R 因此生成在 com.runcam.runcam_gf.R;搬来的 Gyroflow
-    // 源文件在 com.runcam.runcam 包内引用裸 `R`,需显式 `import com.runcam.runcam_gf.R`
-    //(见 GyroflowActivity.kt / GyroflowSyncPanel.kt)。
+    // multiple modules"。本库的 R 因此生成在 com.runcam.runcam_gf.R(原生 UI 已移除,
+    // 现存 com.runcam.runcam 包内的引擎源文件不引用资源,无需 R import)。
     namespace = "com.runcam.runcam_gf"
 
     compileSdk = 36

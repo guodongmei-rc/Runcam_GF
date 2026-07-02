@@ -47,23 +47,23 @@ dart run pigeon --input pigeons/runcam_gf_api.dart
 3. **原生薄壳**把 Pigeon 调用转发到既有引擎:
    - iOS `EngineApiImpl.swift` / `PreviewApiImpl.swift`(+ `PreviewController.mm`)→ `gyroflow_*` C FFI(`ios/Libs/gyroflow_ffi.h`);MDK 解码 + Metal 渲染 + AVAssetWriter 导出。
    - Android `EngineApiImpl.kt` / `PreviewApiImpl.kt`(+ `PreviewController.kt`)→ `GyroflowNative.kt` JNI;MediaCodec 解码(`VideoDecoder.kt`)+ wgpu 渲染 + MediaCodec 导出(`GyroflowExporter.kt`,被新的预览壳原样复用)。
-   旧的原生全屏编辑器仍在(`GyroflowActivity`、`GyroflowLauncher`),经 `RuncamGF.open()` 走**独立的** `com.runcam/gyroflow` channel 拉起——与 Pigeon 桥互不相干。Android 引擎是 **`.so` 单例**(无 per-stabilizer 句柄),所以预览壳通过调同样的 `GyroflowNative.*` 自动与 `EngineApiImpl` 共享状态;iOS 则是把 `stabilizerHandle` 闭包传进 `PreviewApiImpl`。
+   旧的原生全屏编辑器(`GyroflowActivity`、`GyroflowLauncher`、`RuncamGF.open()` 与 `com.runcam/gyroflow` channel)已在本分支**整体移除**(commit 3b3c53e);编辑器唯一入口是 Dart 的 `PreviewPage`。Android 引擎是 **`.so` 单例**(无 per-stabilizer 句柄),所以预览壳通过调同样的 `GyroflowNative.*` 自动与 `EngineApiImpl` 共享状态;iOS 则是把 `stabilizerHandle` 闭包传进 `PreviewApiImpl`。
 
 ### ParamsModel —— Dart 状态层的核心
 
-`lib/src/state/params_model.dart`(+ `part` 文件 `params_model_{stabilize,zoom,advanced}.dart`)镜像权威的 `ios/Sources/ParamsModel.m`。每个参数 setter 都遵循同一契约:
+`lib/src/state/params_model.dart`(+ `part` 文件 `params_model_{stabilize,zoom,advanced}.dart`)誊写自原生 `ios/Sources/ParamsModel.m`(该文件已随原生 UI 移除;历史版本:`git show 3b3c53e^:ios/Sources/ParamsModel.m`)。**Dart 侧现在就是事实源**。每个参数 setter 都遵循同一契约:
 
 **clamp → 立即 push 给引擎 → 启动一个共享的 200ms 防抖 → `recomputeBlocking` → 写回只读输出(`maxAngle{Pitch,Yaw,Roll}`、`minFov`)→ `notifyListeners`。**
 
 已固化的关键约定(不核对 `.m` 别去“修”它们):
-- `defaults.dart` 与 `clamp.dart` 是从 `ParamsModel.m` 誊写的;当 `.h` 注释与 `.m` 不一致时,**以 `.m` 为准**(已就地标注)。
+- `defaults.dart` 与 `clamp.dart` 是从已删除的 `ParamsModel.m` 誊写的,当年 `.h` 注释与 `.m` 不一致处均已按 `.m` 固化并就地标注;现在 Dart 里的值即事实源,别按猜测去"修"它们,历史对照走 git(见上)。
 - 部分参数需经专用方法做多字段原子 push:`pushHorizonLock`(9 个参数;锁关闭时 amount 强制为 0)、`pushVideoSpeed`、`pushBackgroundColor`、`pushAdaptiveZoom`(croppingMode→adaptive_zoom 映射 0→0.0 / 1→sec / 2→-1.0)。
 - `pushAllDefaultsAndRecompute()` 由控制器在 `createStabilizer` 后调用一次,push 每个 FFI 支撑的值后直接重算(绕过防抖)。
 - `ParamsModel` 只依赖抽象接口 `EngineBridge`(`lib/src/state/engine_bridge.dart`),故测试可注入 `FakeEngineBridge`。真实的 `EngineBridgeImpl` 1:1 转发到生成的 `EngineApi`。
 
 ### 打开视频时的生命周期(`EditController.openAndStart`)
 
-`pickVideo`(原生选择器 channel)→ `createStabilizer` → `openVideo` → `setStabEnabled(true)`(防抖开关**不是**面板参数;控制器必须显式开启,对齐 `ViewController`)→ `_autoMatchLensIfNeeded`(视频自带镜头档案缺失时,按检测到的相机 + 视频 WxH 匹配内置镜头档案)→ `setOutputSizeExact` 把预览降采样到 ≤1080p → `pushAllDefaultsAndRecompute` → 拉取录制参数/镜头/陀螺元数据 + 时间线 → 启动预览后端 → 按条件跑 autosync。控制器**不 push `gyro_offset`**(对齐 `ParamsModel.m`:从不写 stabilizer 的偏移);raw-IMU + 有镜头档案的视频由 autosync 求得逐点偏移,在 `autosync_finish` 内部应用。
+`pickVideo`(原生选择器 channel)→ `createStabilizer` → `openVideo` → `setStabEnabled(true)`(防抖开关**不是**面板参数;控制器必须显式开启,对齐已移除的原生 `ViewController`)→ `_autoMatchLensIfNeeded`(视频自带镜头档案缺失时,按检测到的相机 + 视频 WxH 匹配内置镜头档案)→ `setOutputSizeExact` 把预览降采样到 ≤1080p → `pushAllDefaultsAndRecompute` → 拉取录制参数/镜头/陀螺元数据 + 时间线 → 启动预览后端 → 按条件跑 autosync。控制器**不 push `gyro_offset`**(对齐原生 ParamsModel 的行为:从不写 stabilizer 的偏移);raw-IMU + 有镜头档案的视频由 autosync 求得逐点偏移,在 `autosync_finish` 内部应用。
 
 ### 预览后端
 
@@ -73,4 +73,4 @@ dart run pigeon --input pigeons/runcam_gf_api.dart
 
 ## 迁移状态与参考
 
-`docs/flutter-ui-migration.md` 是总规划(步骤 0/1/3/4;步骤 2 —— 一个 `dart:ffi` 统一引擎 —— 有意跳过)。各切片的设计 + 计划文档在 `docs/superpowers/{specs,plans}/`。实现某切片前先读它的设计文档;里面列出了被移植的确切原生文件,以及对照 `ParamsModel.h`/`GyroflowNative.kt` 的逐字段核对表。
+`docs/flutter-ui-migration.md` 是总规划(步骤 0/1/3/4;步骤 2 —— 一个 `dart:ffi` 统一引擎 —— 有意跳过)。各切片的设计 + 计划文档在 `docs/superpowers/{specs,plans}/`。实现某切片前先读它的设计文档;里面列出了被移植的确切原生文件,以及对照 `ParamsModel.h`(已删,历史见 git)/`GyroflowNative.kt` 的逐字段核对表。原生 UI 及其源文件已整体移除,文档中「仍在/保留」的描述以当前代码树为准。

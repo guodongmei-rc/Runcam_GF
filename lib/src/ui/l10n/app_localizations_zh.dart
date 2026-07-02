@@ -9,14 +9,6 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get homeOpenGyroflow => '打开 Gyroflow 防抖';
-
-  @override
-  String homeOpenFailed(String code, String message) {
-    return '打开失败:$code $message';
-  }
-
-  @override
   String homeSmokeFailedPlatform(String code, String message) {
     return 'smoke 失败:$code $message';
   }
@@ -437,11 +429,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ctlRootDir => '根目录';
-
-  @override
-  String ctlSelectFolderFailed(String error) {
-    return '选择目录失败:$error';
-  }
 
   @override
   String get ctlInitializingExport => '正在初始化导出…';
