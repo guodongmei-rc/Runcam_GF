@@ -156,6 +156,12 @@ abstract class EngineApi {
   String loadLens(String uriOrIdOrJson); // 文件/内置id/JSON
   String getLensInfoFull(); // 完整镜头档案 JSON
 
+  /// 当前已加载镜头库版本号(内置库/已安装更新包, 对应 gyroflow/lens_profiles 的 release 号)。
+  int getLensProfileDbVersion();
+
+  /// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。失败抛异常。
+  int installLensProfiles(Uint8List data);
+
   /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
   /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
   /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。

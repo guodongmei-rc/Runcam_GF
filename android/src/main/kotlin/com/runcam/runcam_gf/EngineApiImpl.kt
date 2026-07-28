@@ -313,6 +313,16 @@ class EngineApiImpl(
     override fun lensSearch(query: String): String = GyroflowNative.nativeLensSearch(query) ?: "[]"
     override fun loadLens(uriOrIdOrJson: String): String = GyroflowNative.nativeLoadLens(uriOrIdOrJson) ?: "{\"ok\":false}"
 
+    /** 当前镜头库版本号(内置库或已安装更新包, 对应 gyroflow/lens_profiles release 号)。 */
+    override fun getLensProfileDbVersion(): Long = GyroflowNative.nativeGetLensDbVersion().toLong()
+
+    /** 安装下载的 profiles.cbor.gz 并热重载镜头库。原生验证失败(返回-1)时抛 FlutterError。 */
+    override fun installLensProfiles(data: ByteArray): Long {
+        val v = GyroflowNative.nativeInstallLensProfiles(data)
+        if (v <= 0) throw FlutterError("LENS_INSTALL_FAILED", "profiles.cbor.gz 验证或写入失败", null)
+        return v.toLong()
+    }
+
     /**
      * 取镜头档案完整信息。安卓 nativeGetLensInfo 不含 sync_settings(那是独立的
      * nativeGetSyncSettings),但 Dart 的 _fetchLensInfo 期望 sync_settings **内嵌**在此(对齐 iOS)——

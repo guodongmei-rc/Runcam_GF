@@ -283,6 +283,33 @@ fn lens_search(q: &str) -> Result<String, String> {
     Ok(serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string()))
 }
 
+/// 当前已加载镜头库版本号(对应 gyroflow/lens_profiles 的 release 号)。确保 LENS_DB 已加载。
+fn lens_db_version() -> i32 {
+    let mut guard = LENS_DB.lock().unwrap();
+    if guard.is_none() {
+        let mut db = gyroflow_core::lens_profile_database::LensProfileDatabase::default();
+        db.load_all();
+        *guard = Some(db);
+    }
+    guard.as_ref().unwrap().version as i32
+}
+
+/// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。
+/// 对齐官方桌面 controller.fetch_profiles_from_github 的落盘+重载行为:
+/// 落盘到 settings::data_dir()/lens_profiles/(之后 load_all 优先用它),
+/// 重置 LENS_DB 搜索缓存, 并热替换活动 session 的 manager.lens_profile_db。
+fn install_lens_profiles(data: &[u8]) -> Result<i32, String> {
+    let version = gyroflow_core::lens_profile_database::LensProfileDatabase::install_from_bytes(data)?;
+    *LENS_DB.lock().unwrap() = None; // 下次 lens_search 重新 load_all
+    let guard = STAB.lock().unwrap();
+    if let Some(session) = guard.as_ref() {
+        let mut db = gyroflow_core::lens_profile_database::LensProfileDatabase::default();
+        db.load_all();
+        *session.manager.lens_profile_db.write() = db;
+    }
+    Ok(version as i32)
+}
+
 /// 取当前已加载镜头档案信息(字段对齐 iOS LensProfile.qml)。
 /// 基础表: camera/lens/camera_setting/note/calib_dimension/calibrated_by
 ///         + 条件项 focal_length/crop_factor/asymmetrical/distortion_model/digital_lens
@@ -1439,6 +1466,33 @@ pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeLensSearch<'l
         let q: String = env.get_string(&query)?.into();
         let msg = lens_search(&q).unwrap_or_else(|_| "[]".to_string());
         Ok(env.new_string(msg)?.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// 当前已加载镜头库版本号(内置库或已安装更新包)。出错默认 0。
+#[no_mangle]
+pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeGetLensDbVersion<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+) -> jint {
+    env.with_env(|_env| -> jni::errors::Result<jint> { Ok(lens_db_version()) })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号; 失败返回 -1。
+#[no_mangle]
+pub extern "system" fn Java_com_runcam_runcam_GyroflowNative_nativeInstallLensProfiles<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    data: JByteArray<'local>,
+) -> jint {
+    env.with_env(|env| -> jni::errors::Result<jint> {
+        let bytes = env.convert_byte_array(&data)?;
+        Ok(install_lens_profiles(&bytes).unwrap_or_else(|e| {
+            log::warn!("[lens] install profiles failed: {e}");
+            -1
+        }))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }

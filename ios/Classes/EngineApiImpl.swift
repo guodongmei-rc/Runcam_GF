@@ -434,6 +434,33 @@ final class EngineApiImpl: EngineApi {
         return Int64(rc)
     }
 
+    /// 当前已加载镜头库版本号(对应 gyroflow/lens_profiles 的 release 号)。
+    /// 供 LensProfileUpdater 比较是否需要在线更新。
+    func getLensProfileDbVersion() throws -> Int64 {
+        if let h = handle { return Int64(gyroflow_get_lens_db_version(h)) }
+        if lensSearchStab == nil { lensSearchStab = gyroflow_stabilizer_new() }
+        guard let s = lensSearchStab else { return -1 }
+        return Int64(gyroflow_get_lens_db_version(s))
+    }
+
+    /// 安装下载的 profiles.cbor.gz 并热重载镜头库, 返回新版本号。
+    /// 注意: 专用搜索 stabilizer(lensSearchStab)的库独立于主 handle, 也要一并热重载。
+    func installLensProfiles(data: FlutterStandardTypedData) throws -> Int64 {
+        guard let h = handle else { throw engineError("NO_STABILIZER", "openVideo 前需先 createStabilizer") }
+        let rc = data.data.withUnsafeBytes { ptr -> Int32 in
+            gyroflow_install_lens_profiles(h, ptr.baseAddress?.assumingMemoryBound(to: UInt8.self), ptr.count)
+        }
+        if rc <= 0 {
+            throw engineError("LENS_INSTALL_FAILED", String(cString: gyroflow_last_error()))
+        }
+        if let s = lensSearchStab {
+            _ = data.data.withUnsafeBytes { ptr -> Int32 in
+                gyroflow_install_lens_profiles(s, ptr.baseAddress?.assumingMemoryBound(to: UInt8.self), ptr.count)
+            }
+        }
+        return Int64(rc)
+    }
+
     func getLensInfoFull() throws -> String {
         guard let h = handle else { return "{}" }
         var buf = [CChar](repeating: 0, count: 8192)

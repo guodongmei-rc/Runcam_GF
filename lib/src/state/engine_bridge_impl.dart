@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../bridge/engine_api.g.dart';
 import 'engine_bridge.dart';
+import 'lens_profile_updater.dart';
 
 /// 真实引擎桥:每方法 1:1 转发到 Pigeon 生成的 EngineApi。
 /// 同时实现 EngineEvents(原生→Dart 回调),把 autosync 进度/结束转成 Dart 流。
@@ -19,7 +20,11 @@ class EngineBridgeImpl implements EngineBridge, EngineEvents {
       StreamController<(double, int, int)>.broadcast();
 
   @override
-  Future<void> createStabilizer() => _api.createStabilizer();
+  Future<void> createStabilizer() async {
+    await _api.createStabilizer();
+    // 镜头库在线检查更新(24h 节流, fire-and-forget, 失败静默)
+    unawaited(LensProfileUpdater.maybeUpdate(_api));
+  }
   @override
   Future<void> freeStabilizer() => _api.freeStabilizer();
   @override

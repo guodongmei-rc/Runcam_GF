@@ -1,5 +1,6 @@
 export 'src/state/engine_bridge.dart' show EngineBridge, VideoInfo, StabInfo;
 export 'src/state/engine_bridge_impl.dart' show EngineBridgeImpl;
+export 'src/state/lens_profile_updater.dart' show LensProfileUpdater;
 export 'src/state/params_model.dart'
     show
         ParamsModel,

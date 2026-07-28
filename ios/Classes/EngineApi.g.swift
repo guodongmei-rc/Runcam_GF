@@ -356,6 +356,10 @@ protocol EngineApi {
   func lensSearch(query: String) throws -> String
   func loadLens(uriOrIdOrJson: String) throws -> String
   func getLensInfoFull() throws -> String
+  /// 当前已加载镜头库版本号(内置库/已安装更新包, 对应 gyroflow/lens_profiles 的 release 号)。
+  func getLensProfileDbVersion() throws -> Int64
+  /// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。失败抛异常。
+  func installLensProfiles(data: FlutterStandardTypedData) throws -> Int64
   /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
   /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
   /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。
@@ -951,6 +955,36 @@ class EngineApiSetup {
       }
     } else {
       getLensInfoFullChannel.setMessageHandler(nil)
+    }
+    /// 当前已加载镜头库版本号(内置库/已安装更新包, 对应 gyroflow/lens_profiles 的 release 号)。
+    let getLensProfileDbVersionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.getLensProfileDbVersion\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getLensProfileDbVersionChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getLensProfileDbVersion()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getLensProfileDbVersionChannel.setMessageHandler(nil)
+    }
+    /// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。失败抛异常。
+    let installLensProfilesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.runcam_gf.EngineApi.installLensProfiles\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      installLensProfilesChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let dataArg = args[0] as! FlutterStandardTypedData
+        do {
+          let result = try api.installLensProfiles(data: dataArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      installLensProfilesChannel.setMessageHandler(nil)
     }
     /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
     /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。

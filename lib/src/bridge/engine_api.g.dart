@@ -1121,6 +1121,62 @@ class EngineApi {
     }
   }
 
+  /// 当前已加载镜头库版本号(内置库/已安装更新包, 对应 gyroflow/lens_profiles 的 release 号)。
+  Future<int> getLensProfileDbVersion() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.getLensProfileDbVersion$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as int?)!;
+    }
+  }
+
+  /// 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。失败抛异常。
+  Future<int> installLensProfiles(Uint8List data) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.runcam_gf.EngineApi.installLensProfiles$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[data]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as int?)!;
+    }
+  }
+
   /// 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
   /// .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
   /// 返回 gyroflow_autoload_lens_for_camera 的 rc:0=已加载;-2=无可匹配/已有档案;-1=错。

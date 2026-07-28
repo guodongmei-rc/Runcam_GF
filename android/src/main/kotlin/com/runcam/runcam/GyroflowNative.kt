@@ -139,6 +139,12 @@ object GyroflowNative {
     /** 搜索内置镜头库, 返回 JSON 数组 [{"name","id"}]。 */
     external fun nativeLensSearch(query: String): String?
 
+    /** 当前已加载镜头库版本号(对应 gyroflow/lens_profiles 的 release 号)。 */
+    external fun nativeGetLensDbVersion(): Int
+
+    /** 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号; 失败 -1。 */
+    external fun nativeInstallLensProfiles(data: ByteArray): Int
+
     /** 加载镜头配置文件(content:// 或路径 或 内置 id)。 */
     external fun nativeLoadLens(uri: String): String?
 

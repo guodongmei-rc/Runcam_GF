@@ -312,6 +312,10 @@ interface EngineApi {
   fun lensSearch(query: String): String
   fun loadLens(uriOrIdOrJson: String): String
   fun getLensInfoFull(): String
+  /** 当前已加载镜头库版本号(内置库/已安装更新包, 对应 gyroflow/lens_profiles 的 release 号)。 */
+  fun getLensProfileDbVersion(): Long
+  /** 安装下载的 profiles.cbor.gz 字节并热重载镜头库, 返回新版本号。失败抛异常。 */
+  fun installLensProfiles(data: ByteArray): Long
   /**
    * 按当前已识别相机身份(camera_id)从内置库自动加载镜头档案。用于「相机身份在外挂
    * .gcsv 里、视频本身无 telemetry」的机型(如 RunCam6):加载 gcsv 后调用。
@@ -1005,6 +1009,38 @@ interface EngineApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               listOf(api.getLensInfoFull())
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.getLensProfileDbVersion$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getLensProfileDbVersion())
+            } catch (exception: Throwable) {
+              wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.runcam_gf.EngineApi.installLensProfiles$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val dataArg = args[0] as ByteArray
+            val wrapped: List<Any?> = try {
+              listOf(api.installLensProfiles(dataArg))
             } catch (exception: Throwable) {
               wrapError(exception)
             }

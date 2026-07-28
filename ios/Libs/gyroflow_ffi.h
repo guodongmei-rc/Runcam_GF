@@ -602,6 +602,18 @@ int32_t gyroflow_set_frame_offset(GyroflowStabilizer *handle, int32_t frames);
 int32_t gyroflow_lens_search(GyroflowStabilizer *handle, const char *query, char *out_buf, size_t out_buf_len);
 
 /**
+ * 当前已加载镜头库版本号（对应 gyroflow/lens_profiles 的 release 号，
+ * 内置库或 data_dir/lens_profiles 里已安装的更新包）。出错 -1。
+ */
+int32_t gyroflow_get_lens_db_version(GyroflowStabilizer *handle);
+
+/**
+ * 安装下载的 profiles.cbor.gz 字节并热重载镜头库，返回新版本号；出错 -1。
+ * 落盘到 app 数据目录 lens_profiles/，之后 load_all 优先使用。
+ */
+int32_t gyroflow_install_lens_profiles(GyroflowStabilizer *handle, const uint8_t *data, size_t data_len);
+
+/**
  * 取当前已加载镜头的显示信息，JSON 写进 out_buf：
  * {"name":"...","camera":"品牌 型号","lens":"镜头型号","has_lens":true}
  * 成功 0，失败 -1。
